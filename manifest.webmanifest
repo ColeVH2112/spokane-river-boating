@@ -1,0 +1,11 @@
+{
+  "name": "Spokane River Boating Zones",
+  "short_name": "River Zones",
+  "description": "Where you can cruise, tow and wake surf on the Spokane River, Post Falls Dam to Lake Coeur d'Alene.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b2f4a",
+  "theme_color": "#0b2f4a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

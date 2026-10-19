@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b2f4a" />
+<meta name="description" content="Where you can cruise, tow, and wake surf on the Spokane River from Post Falls Dam to Lake Coeur d'Alene — Idaho and Kootenai County rules mapped from the shoreline and every dock." />
+<title>Spokane River Boating Zones</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<link rel="stylesheet" href="vendor/geoman/leaflet-geoman.css" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<svg class="svgdefs" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="nwzHatch" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(45)">
+      <rect width="9" height="9" fill="#8a1630" fill-opacity="0.28"></rect><rect width="3.5" height="9" fill="#8a1630" fill-opacity="0.85"></rect></pattern>
+    <pattern id="cauHatch" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(-45)">
+      <rect width="9" height="9" fill="#ffffff" fill-opacity="0.22"></rect><rect width="3" height="9" fill="#111111" fill-opacity="0.75"></rect></pattern>
+    <pattern id="nmzHatch" patternUnits="userSpaceOnUse" width="10" height="10">
+      <rect width="10" height="10" fill="#c2185b" fill-opacity="0.3"></rect><path d="M0 0L10 10M10 0L0 10" stroke="#c2185b" stroke-width="2.2" stroke-opacity="0.9"></path></pattern>
+    <pattern id="nezHatch" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)">
+      <rect width="10" height="10" fill="#e00000" fill-opacity="0.35"></rect><rect width="5" height="10" fill="#111111" fill-opacity="0.85"></rect></pattern>
+    <pattern id="nepHatch" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)">
+      <rect width="12" height="12" fill="#111111" fill-opacity="0.18"></rect><rect width="3" height="12" fill="#111111" fill-opacity="0.7"></rect></pattern>
+  </defs>
+</svg>
+<div class="gpsbar" id="gpsbar" role="status" aria-live="polite"></div>
+
+<header class="top">
+  <a class="brand" href="#map" aria-label="Spokane River Boating Zones — map">
+    <img src="icon.svg" alt="" width="34" height="34" />
+    <span class="brand-text">
+      <h1 class="brand-title">Spokane River Boating Zones</h1>
+      <span class="brand-sub">Post Falls Dam → Lake Coeur d'Alene · Kootenai County, Idaho</span>
+    </span>
+  </a>
+  <div class="conds" id="conds" aria-label="Live conditions"></div>
+  <nav class="topnav" aria-label="Sections">
+    <a href="#map">Map</a><a href="#downloads">Downloads</a><a href="#rules">Rules</a><a href="#about">About</a>
+  </nav>
+</header>
+
+<main>
+<section class="app" id="map" aria-label="Interactive map">
+  <div class="mapcol">
+    <div id="lmap" aria-label="Map of boating zones"></div>
+    <div class="views" role="tablist" aria-label="Map view">
+      <button class="view on" data-view="bottom" role="tab" aria-selected="true" title="Which setbacks each spot clears under current rules">Where to boat</button>
+      <button class="view" data-view="surf" role="tab" title="Wake-surf focus: tow-zone water, the 200-ft surf guideline, the 10-ft depth line and surf lanes">Wake surf</button>
+      <button class="view" data-view="pass" role="tab" title="Where the river is wide enough to pass at speed">Room to pass</button>
+      <button class="view" data-view="depth" role="tab" title="Depth from bathymetric contours, adjusted to today's lake level">Depth</button>
+      <button class="view" data-view="rule" role="tab" title="Where you could boat following just one rule">One rule</button>
+    </div>
+    <div class="rulepick" id="rulepick" hidden>
+      <span>Show only:</span>
+      <button class="chip on" data-rule="nowake">No-wake 100 ft</button>
+      <button class="chip" data-rule="tow">No-tow 150 ft</button>
+      <button class="chip" data-rule="surf">Surf guide 200 ft</button>
+    </div>
+    <div class="busy" id="busy" aria-hidden="true">updating…</div>
+    <div class="hwbanner" id="hwBanner" role="alert" hidden></div>
+    <div class="legend" id="legend" aria-label="Legend"></div>
+    <div class="reviewcard" id="reviewcard" hidden></div>
+    <div class="drawhint" id="drawhint" hidden></div>
+  </div>
+
+  <aside class="panel" aria-label="Summary and tools">
+    <div class="card hero" id="hero">
+      <div class="hero-head">
+        <h2>The bottom line</h2>
+        <span class="whatif" id="whatif" hidden>What-if rules <button class="linkbtn" id="resetRules">reset</button></span>
+      </div>
+      <p class="headline" id="headline">Loading the river…</p>
+      <div class="tiles">
+        <div class="tile t-tow"><b id="stTow">–</b><span id="stTowL">acres in the tow zone (150 ft+)</span><em id="dTow"></em></div>
+        <div class="tile t-surf"><b id="stSurf">–</b><span id="stSurfL">acres also meeting the 200-ft surf guideline</span><em id="dSurf"></em></div>
+        <div class="tile t-idle"><b id="stIdle">–</b><span>acres no-wake (5 mph)</span><em id="dIdle"></em></div>
+        <div class="tile t-runs"><b id="stRuns">–</b><span id="stRunsL">straight lanes ≥ 3,000 ft</span><em id="dRuns"></em></div>
+      </div>
+      <div class="stack" id="stack" aria-label="Share of the river by zone"></div>
+      <p class="fine" id="heroFine"></p>
+    </div>
+
+    <div class="card tools">
+      <div class="tabs" role="tablist">
+        <button class="tab on" data-tab="tRules" role="tab" id="tab-tRules" aria-controls="tRules" aria-selected="true">Adjust rules</button>
+        <button class="tab" data-tab="tRuns" role="tab" id="tab-tRuns" aria-controls="tRuns" aria-selected="false">Plan a run</button>
+        <button class="tab" data-tab="tEdit" role="tab" id="tab-tEdit" aria-controls="tEdit" aria-selected="false">Edit map</button>
+        <button class="tab" data-tab="tDl" role="tab" id="tab-tDl" aria-controls="tDl" aria-selected="false">Download</button>
+      </div>
+
+      <section class="tabsec" id="tRules" role="tabpanel" aria-labelledby="tab-tRules">
+        <p class="note">Every distance below is live. Change one and the map, acreages and downloads follow — handy for
+          asking "what if the county rule were 200 ft?"</p>
+        <div class="presets" id="presets" aria-label="Scenarios"></div>
+        <div id="ruleCtl"></div>
+        <div class="sub">How each rule shrinks the river</div>
+        <div class="waterfall" id="waterfall"></div>
+        <div class="sub">Options</div>
+        <label class="check"><input type="checkbox" id="optZones" checked /> <span>Apply designated zones (no-wake, no-motor, no-entry)</span></label>
+        <label class="check"><input type="checkbox" id="optLevel" checked /> <span>Adjust depths to today's lake level <em id="lvlNote"></em></span></label>
+      </section>
+
+      <section class="tabsec" id="tRuns" role="tabpanel" aria-labelledby="tab-tRuns" hidden>
+        <div class="seg" role="radiogroup" aria-label="Activity">
+          <button class="segb on" data-act="tow">Ski · tube · board</button><button class="segb" data-act="surf">Wake surf</button>
+        </div>
+        <p class="note" id="runsNote">Each lettered stretch is one continuous piece of towing (or surf) water — how far you can run before you must turn or idle.</p>
+        <div class="rule-val runset"><span class="unit">U-turn room</span><input type="range" id="turnFt" min="100" max="500" step="10" value="200" aria-label="U-turn width">
+          <input class="num" type="number" id="turnNum" min="60" max="1000" step="10" value="200" aria-label="U-turn width (ft)"><span class="unit">ft</span></div>
+        <div id="runCards" class="runcards"></div>
+        <div class="sub">Launches</div>
+        <div id="launchCards" class="runcards"></div>
+        <p class="note">River miles (RM) are this map's own: RM 0 at <span id="rmOrigin">Post Falls Dam</span>, counting upstream. Ride times assume 11 mph surfing / 25 mph towing and ignore current, traffic and people in the water.</p>
+      </section>
+
+      <section class="tabsec" id="tEdit" role="tabpanel" aria-labelledby="tab-tEdit" hidden>
+        <div class="editstate" id="editState"></div>
+        <label class="check big"><input type="checkbox" id="editMode" /> <span><b>Edit mode</b> — add, move, tag, and delete map features</span></label>
+        <div class="palette" id="palette" aria-label="Feature type to add"></div>
+        <div class="btnrow" id="drawBtns">
+          <button class="btn" id="addPin" title="Click the map to drop a pin of the selected type (P)">＋ Pin</button>
+          <button class="btn" id="addLine" title="Draw a line — log boom, swim line, caution line (L)">＋ Line</button>
+          <button class="btn" id="addArea" title="Draw an area — no-wake zone, swim area, caution area (A)">＋ Area</button>
+          <button class="btn" id="undo" title="Undo (Ctrl/⌘ Z)" aria-label="Undo">↶</button>
+          <button class="btn" id="redo" title="Redo (Ctrl/⌘ Shift Z)" aria-label="Redo">↷</button>
+        </div>
+        <div class="sub">Review pins</div>
+        <p class="note" id="reviewNote">Step through imported features and auto-detected docks, west to east. Auto-detected
+          docks don't count until confirmed. Keys: <kbd>Y</kbd> yes · <kbd>N</kbd> remove · <kbd>T</kbd> change type ·
+          <kbd>→</kbd> skip · <kbd>Esc</kbd> stop.</p>
+        <div class="btnrow"><button class="btn primary" id="startReview">Start review</button>
+          <select id="reviewFilter" aria-label="Which features to review">
+            <option value="unreviewed">Needs review</option><option value="all-docks">All docks</option><option value="all">Everything</option>
+          </select></div>
+        <div class="sub">Layer counts</div>
+        <div class="tagcounts" id="tagCounts"></div>
+        <div class="sub">Save &amp; share edits</div>
+        <p class="note">Edits save in this browser automatically. To publish them, export <code>features.geojson</code> and
+          replace <code>site/data/features.geojson</code>.</p>
+        <div class="btnrow">
+          <button class="btn primary" id="exportEdits">Export features.geojson</button>
+          <button class="btn" id="saveFile" hidden>Save to file…</button>
+          <label class="btn file">Import…<input type="file" id="importFile" accept=".geojson,.json,.kml,.kmz,.gpx" hidden /></label>
+          <button class="btn danger" id="discardEdits">Discard my edits</button>
+        </div>
+        <div class="msg" id="editMsg" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="tabsec" id="tDl" role="tabpanel" aria-labelledby="tab-tDl" hidden>
+        <p class="note">Downloads match the map exactly as you have it set — rules, edits and all.</p>
+        <div class="dlgrid">
+          <button class="dl" id="dlPdf"><b>PDF</b><span>Print or save a chart book</span></button>
+          <button class="dl" id="dlKmz"><b>KMZ</b><span>Google Earth · Avenza · onX</span></button>
+          <button class="dl" id="dlKml"><b>KML</b><span>Google My Maps (flattened)</span></button>
+          <button class="dl" id="dlGpx"><b>GPX</b><span>Chartplotters &amp; nav apps</span></button>
+          <button class="dl" id="dlGeo"><b>GeoJSON</b><span>GIS (QGIS, ArcGIS)</span></button>
+          <button class="dl" id="dlLink"><b>Link</b><span>Copy a link to this view</span></button>
+        </div>
+        <label class="check"><input type="checkbox" id="dlDocks" /> <span>Include every dock as a point (large files)</span></label>
+        <label class="check"><input type="checkbox" id="dlWidth" /> <span>Include room-to-pass layers</span></label>
+        <div class="msg" id="dlMsg" role="status" aria-live="polite"></div>
+        <p class="note">Official versions with the current rules are in <a href="#downloads">Downloads</a>.</p>
+      </section>
+    </div>
+  </aside>
+</section>
+
+<section class="page" id="downloads">
+  <div class="pagewrap">
+    <h2>Downloads</h2>
+    <p class="lede">Take the map on the water. Each file shows the same zones: <span class="sw s-idle"></span>no wake,
+      <span class="sw s-cruise"></span>wake OK but no towing, <span class="sw s-tow"></span>the tow zone (150 ft+),
+      <span class="sw s-surf"></span>water that also meets the 200-ft surf guideline, and <span class="sw s-runs"></span>3,000 ft+ straight lanes.</p>
+    <div class="cards3" id="officialDl"></div>
+    <div class="howto">
+      <details open><summary>Google Earth on your phone (KMZ)</summary>
+        <ol><li>Download the KMZ on your phone.</li><li>Open it — choose <b>Google Earth</b> when asked (or in Google Earth: ☰ → Projects → Open → Import KML file).</li>
+        <li>Tap the layers to show or hide zones. Your blue location dot shows which zone you're in.</li></ol></details>
+      <details><summary>Google My Maps (KML)</summary>
+        <ol><li>Go to <b>mymaps.google.com</b> → Create a new map.</li><li>In the first layer choose <b>Import</b> and select the KML.</li>
+        <li>On your phone, open the Google Maps app → <b>You</b> → <b>Maps</b> to see it. This KML is flattened for My Maps
+          (no folders, no dock pins); use the KMZ for the full layer set.</li></ol></details>
+      <details><summary>Chartplotters and navigation apps (GPX)</summary>
+        <ol><li>Copy the GPX to the plotter's SD card or import it in the manufacturer app (Garmin ActiveCaptain, Lowrance/Simrad/B&amp;G
+          via the C-MAP / Navico app). Navionics Boating: open the .gpx from Files or e-mail and choose Navionics
+          (needs an active subscription), then turn on each track under Menu → Tracks.</li><li>Zone edges load as <b>tracks</b> and launches, fuel and hazards as <b>waypoints</b>.
+          GPX can't fill areas, so read a tow-zone track as "the tow zone is on the river side of this line."</li>
+          <li>Older plotters limit points per track; if a track is cut short, use the KMZ on a phone instead.</li></ol></details>
+      <details><summary>Avenza Maps and onX</summary>
+        <ol><li>Use the <b>KMZ</b> for both. Avenza Maps: open a base map and import the KMZ as a layer.
+          onX Hunt or onX Offroad: Import File, then pick the KMZ.</li></ol></details>
+      <details><summary>Print (PDF)</summary>
+        <ol><li>The PDF is a chart book: an overview page, three close-up sections, and the rules. Print at 100% on letter paper.</li></ol></details>
+    </div>
+  </div>
+</section>
+
+<section class="page alt" id="rules">
+  <div class="pagewrap">
+    <h2>The rules this map shows</h2>
+    <p class="lede">Distances are measured from the shoreline and from every dock, pier, log boom, swim area, and
+      structure on the map. Rules about swimmers and moving boats can't be drawn, so they're listed but always apply on the water.</p>
+    <p class="asof" id="rulesAsOf"></p>
+    <div id="rulesList" class="rules"></div>
+  </div>
+</section>
+
+<section class="page" id="about">
+  <div class="pagewrap two">
+    <div>
+      <h2>About this map</h2>
+      <div id="aboutData" class="about"></div>
+    </div>
+    <div class="cta">
+      <h3>A map like this for your water</h3>
+      <p>Lake associations and watershed districts get the same interactive map, the PDF chart book, and the KMZ and GPX
+        files for their own lake or river — built from your local rules, docks, and no-wake zones.</p>
+      <ol><li>Send us your water and its rules.</li><li>We map the shoreline, docks, depths and zones; you review them in this editor.</li>
+        <li>Share one link with your boaters.</li></ol>
+      <p><a class="btn primary" id="ctaMail" href="#">Contact Cole Van Hersett</a></p>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <p id="footCredits"></p>
+  <p id="footDisc"></p>
+</footer>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/geoman/leaflet-geoman.js"></script>
+<script src="engine.js"></script>
+<script src="export.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

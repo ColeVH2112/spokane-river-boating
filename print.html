@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chart book</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<style>
+  @page { size: letter landscape; margin: 0.3in; }
+  :root { --ink: #0f2233; --ink-2: #4c6172; --line: #cfd8de; --deep: #0b2f4a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9eef2; color: var(--ink); font: 12px/1.35 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bar { position: sticky; top: 0; z-index: 10; display: flex; gap: .6rem; align-items: center; padding: .55rem 1rem; background: #0b2f4a; color: #fff; }
+  .bar button { font: 600 13px inherit; padding: .35rem .8rem; border-radius: 7px; border: 0; background: #fff; color: #0b2f4a; cursor: pointer; }
+  .bar span { opacity: .85; }
+  .page { width: 10.4in; height: 7.9in; margin: .3in auto; background: #fff; box-shadow: 0 2px 14px rgba(0,0,0,.18); padding: .32in .38in;
+          display: flex; flex-direction: column; overflow: hidden; page-break-after: always; break-after: page; position: relative; }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; color: var(--deep); }
+  h2 { margin: 0; font-size: 16px; color: var(--deep); }
+  .sub { color: var(--ink-2); font-size: 12px; margin: 2px 0 0; }
+  .crit { font-size: 11px; color: #7a4b00; background: #fff4d6; border: 1px solid #f0d58c; border-radius: 6px; padding: 3px 8px; display: inline-block; margin-top: 5px; }
+  .crit.law { color: #0b5d34; background: #e3f6ea; border-color: #a9dcbc; }
+  .crit.hw { color: #fff; background: #b3261e; border-color: #b3261e; font-weight: 700; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 8px; }
+  .head .right { text-align: right; font-size: 11px; color: var(--ink-2); }
+  .map { flex: 1; min-height: 0; border: 1px solid #9aa9b4; border-radius: 4px; background: #0d2231; }
+  .row { display: flex; gap: 12px; margin-top: 8px; align-items: stretch; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 10.5px; align-items: center; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 13px; height: 13px; border-radius: 2px; border: 1px solid rgba(0,0,0,.25); display: inline-block; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: none; width: 4.4in; }
+  .stat { border: 1px solid var(--line); border-radius: 6px; padding: 4px 7px; border-left-width: 4px; }
+  .stat b { font-size: 16px; display: block; } .stat span { font-size: 9.5px; color: var(--ink-2); }
+  .howto { font-size: 10.5px; color: var(--ink-2); margin: 0; padding-left: 16px; flex: 1; }
+  .foot { font-size: 9px; color: #6b7d8a; margin-top: auto; padding-top: 6px; display: flex; justify-content: space-between; gap: 1rem; }
+  .rules { columns: 2; column-gap: 22px; font-size: 10.5px; margin-top: 8px; flex: none; }
+  .place.left { right: 18px; left: auto !important; text-align: right; }
+  .rules div { break-inside: avoid; margin-bottom: 9px; }
+  .rules b { color: var(--deep); }
+  .rules .cite { color: var(--ink-2); font-size: 10px; }
+  .place { font: 700 11px ui-sans-serif, Arial, sans-serif; color: #fff; text-shadow: 0 0 3px #000, 0 0 2px #000; white-space: nowrap; }
+  .pin { width: 15px; height: 15px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.5); font: 800 8px/11px Arial; text-align: center; color: #062033; }
+  .leaflet-control-attribution { font-size: 7px !important; }
+  .leaflet-control-scale-line { font-size: 9px; }
+  .north { position: absolute; z-index: 500; right: 8px; top: 8px; background: rgba(255,255,255,.9); border-radius: 50%; width: 28px; height: 28px;
+           display: grid; place-items: center; font: 800 11px Arial; color: #0b2f4a; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .mapwrap { position: relative; flex: 1; min-height: 0; display: flex; }
+  .mapwrap .map { flex: 1; }
+  .err { color: #a32633; padding: 2rem; font-size: 14px; }
+  .qr { display: flex; gap: 8px; align-items: center; font-size: 10px; color: var(--ink-2); max-width: 2.6in; }
+  .qr svg { width: 0.85in; height: 0.85in; flex: none; }
+  @media print { body { background: #fff; } .bar { display: none; } .page { margin: 0; box-shadow: none; width: auto; height: 7.85in; } }
+</style>
+</head>
+<body>
+<div class="bar"><button id="printBtn">Print / Save as PDF</button><span id="barMsg">Loading maps…</span></div>
+<div id="pages"></div>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/qrcode/qrcode.js"></script>
+<script src="engine.js"></script>
+<script src="export.js"></script>
+<script>
+(async function () {
+  'use strict';
+  const FT = 0.3048;
+  const q = new URLSearchParams(location.search);
+  const official = q.get('official') === '1';
+  const auto = q.get('noprint') !== '1';
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const fmtAc = a => a >= 100 ? Math.round(a).toLocaleString('en-US') : a >= 10 ? Math.round(a).toString() : a.toFixed(1);
+  const fmtFt = f => Math.round(f).toLocaleString('en-US');
+  document.getElementById('printBtn').onclick = () => window.print();
+  try {
+    const [cfg, reach, base] = await Promise.all(['data/config.json', 'data/reach.json', 'data/features.geojson'].map(u => fetch(u).then(r => r.json())));
+    let hand = null;
+    try { hand = JSON.parse(localStorage.getItem('srz:print:v1')); } catch (_) { hand = null; }
+    if (hand && Date.now() - (hand.at || 0) > 6 * 3600e3) hand = null;     // stale hand-off
+    const r = cfg.rules;
+    const pick = k => ({ ft: r[k].ft, shore: !!r[k].shore, structures: !!r[k].structures, minDepthFt: r[k].minDepthFt || 0 });
+    const defaults = { rules: { nowake: pick('nowake'), tow: pick('tow'), surf: pick('surf') }, passFt: r.pass.ft,
+      run: { ft: r.run.ft, laneFt: r.run.laneFt, stepDeg: r.run.stepDeg }, zonesOn: true, levelAdjust: true };
+    const params = !official && hand && hand.params ? hand.params : defaults;
+    const fc = !official && hand && hand.fc ? hand.fc : base;
+    const law = JSON.stringify(params) === JSON.stringify(defaults);
+    const lvl = !official && params.levelAdjust && hand && hand.levelOffsetFt ? hand.levelOffsetFt : 0;   // official: summer full pool
+    const surfView = !official && hand && hand.view === 'surf';
+    const hw = !official && hand && hand.highWater ? hand.highWater : null;   // today's print during high water
+    const eng = ZoneEngine.create(reach);
+    const inp = ZoneExport.engineInputs(eng, fc, cfg);
+    eng.setStructures(inp.structures); eng.setZones(inp.zones);
+    const res = eng.compute({ rules: params.rules, passFt: params.passFt, zonesOn: params.zonesOn, levelOffsetFt: lvl, allNoWake: !!hw,
+      run: { ft: params.run.ft, laneFt: params.run.laneFt, stepDeg: params.run.stepDeg, activity: surfView ? 'surf' : 'tow' } });
+    const s = res.stats, R = params.rules, C = cfg.classes;
+    const place = cfg.place || {};
+    document.title = cfg.title + ' — chart book';
+    const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: place.timeZone || 'America/Los_Angeles' });
+    const lb = k => ZoneExport.label(cfg, k, params);
+    const critTxt = (hw ? `HIGH WATER (lake ${hw.elev.toFixed(1)} ft on ${hw.date}): the entire river is no-wake · ` : '') + `${law ? 'Current rules' : 'What-if rules'}: no wake within ${R.nowake.ft} ft · no towing within ${R.tow.ft} ft · surf guideline ${R.surf.ft} ft` +
+      `${R.tow.structures ? ' — measured from shore and every dock' : ' — from shore'} · lanes ${fmtFt(params.run.ft)} ft${params.zonesOn ? '' : ' · designated zones OFF'}`;
+    const legend = `<div class="legend">${['idle', 'cruise', 'tow', 'surf'].map(k => `<span><i class="sw" style="background:${C[k].color}"></i>${esc(lb(k))}</span>`).join('')}` +
+      `<span><i class="sw" style="border:2px dashed ${C.runs.color}"></i>Straight lane ≥ ${fmtFt(params.run.ft)} ft</span>` +
+      `<span><i class="sw" style="background:#8a1630"></i>Designated no-wake</span><span><i class="sw" style="background:#c2185b"></i>No motors</span>` +
+      `<span><i class="sw" style="background:#111"></i>No entry (dam)</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,#111 0 2px,#fff 2px 5px)"></i>No entry when posted</span>` +
+      `<span><i class="sw" style="background:#ff1a1a;height:4px"></i>Safety boom</span></div>`;
+    const foot = `<div class="foot"><span>${esc(cfg.disclaimer)}</span><span>${esc(cfg.madeBy || cfg.title)} · ${esc(cfg.status)} · map ${esc(cfg.mapVersion)} · ${date}</span></div>`;
+
+    // sections: split the water west -> east into three equal spans, plus the lake approach in the last
+    const bb = (() => { let a = [1e12, 1e12, -1e12, -1e12]; for (const p of reach.water.polygons) for (const [x, y] of p[0]) { a = [Math.min(a[0], x), Math.min(a[1], y), Math.max(a[2], x), Math.max(a[3], y)]; } return a; })();
+    const span = (bb[2] - bb[0]) / 3, sections = [];
+    const names = cfg.sections || ['West', 'Middle', 'East'];
+    for (let k = 0; k < 3; k++) {
+      const x0 = bb[0] + k * span - span * 0.04, x1 = bb[0] + (k + 1) * span + span * 0.04;
+      let y0 = 1e12, y1 = -1e12;
+      const polys = k === 2 ? reach.water.polygons.concat(reach.approach ? reach.approach.polygons : []) : reach.water.polygons;
+      for (const p of polys) for (const [x, y] of p[0]) if (x >= x0 && x <= x1) { y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      // river-mile range of the shoreline inside this section's own (unpadded) span
+      let rmA = Infinity, rmB = -Infinity;
+      const sx0 = bb[0] + k * span, sx1 = bb[0] + (k + 1) * span;
+      for (const p of polys) for (const [x, y] of p[0]) if (x >= sx0 && x <= sx1) {
+        const rm = eng.riverMile(x, y);
+        if (rm != null) { rmA = Math.min(rmA, rm); rmB = Math.max(rmB, rm); }
+      }
+      const rmTxt = Number.isFinite(rmA) ? ` (RM ${rmA.toFixed(1)}–${rmB.toFixed(1)})` : '';
+      sections.push({ name: names[k] + rmTxt, b: [x0, y0, x1, y1] });
+    }
+    const ll = (x, y) => { const [lo, la] = eng.toLonLat(x, y); return [la, lo]; };
+    const ringsLL = rings => rings.map(rg => rg.map(([x, y]) => ll(x, y)));
+
+    const liveUrl = cfg.url || (/^(localhost|127\.|\[::1\])/.test(location.hostname) || location.protocol === 'file:' ? '' : location.origin + location.pathname.replace(/print\.html$/, ''));
+    // (also used for the "Interactive map" line on the rules page — omitted when there is no public address)
+    let qrHtml = '';
+    if (liveUrl && typeof qrcode === 'function') {
+      const qr = qrcode(0, 'M'); qr.addData(liveUrl); qr.make();
+      qrHtml = `<div class="qr">${qr.createSvgTag({ cellSize: 3, margin: 0, scalable: true })}<span>Scan for the live map — GPS, today's lake level, and the latest docks and rules.<br><b>${esc(liveUrl.replace(/^https?:\/\//, ''))}</b></span></div>`;
+    }
+    const pages = document.getElementById('pages');
+    const page = html => { const d = document.createElement('section'); d.className = 'page'; d.innerHTML = html; pages.appendChild(d); return d; };
+    page(`<div class="head"><div><h1>${esc(cfg.title)}</h1><p class="sub">${esc(cfg.subtitle)}</p>` +
+      `<span class="crit ${hw ? 'hw' : law ? 'law' : ''}">${esc(critTxt)}</span></div><div class="right">${date}<br>${esc(cfg.status)}</div></div>` +
+      `<div class="mapwrap"><div class="map" id="m0"></div><div class="north">N</div></div>` +
+      `<div class="row"><div class="stats">` +
+      `<div class="stat" style="border-left-color:${C.tow.color}"><b>${fmtAc(s.tow_ok_ac)} ac</b><span>tow zone (${R.tow.ft} ft+)</span></div>` +
+      `<div class="stat" style="border-left-color:${C.surf.color}"><b>${fmtAc(s.surf_ok_ac)} ac</b><span>also meets ${R.surf.ft}-ft surf guide</span></div>` +
+      `<div class="stat" style="border-left-color:${C.idle.color}"><b>${fmtAc(s.idle_ac)} ac</b><span>no wake (5 mph)</span></div>` +
+      `<div class="stat" style="border-left-color:${C.runs.color}"><b>${s.run_zones}</b><span>straight lane${s.run_zones === 1 ? '' : 's'} ≥ ${fmtFt(params.run.ft)} ft · longest ${fmtFt(s.longest_run_ft)} ft</span></div></div>` +
+      `<ol class="howto"><li>Colors show which setbacks each spot clears, measured from the shoreline${R.tow.structures ? ' and every dock' : ''}. They don't promise the water is safe or legal right now.</li>` +
+      `<li>Rules about people and boats apply everywhere: no wake within 100 ft of anyone in the water; 15 mph or less within 50 ft of another boat; keep right in narrow channels and pass port to port. A dock that isn't on the map still counts.</li>` +
+      `<li>Pages 2–4 zoom in on each stretch (river miles, RM, count upstream from ${esc(place.riverMileOrigin || 'the start')}); the rules follow.</li></ol>${qrHtml}</div>${legend}${foot}`);
+    sections.forEach((sec, k) => page(`<div class="head"><div><h2>Section ${k + 1} of 3 · ${esc(sec.name)}</h2>` +
+      `<span class="crit ${hw ? 'hw' : law ? 'law' : ''}">${esc(critTxt)}</span></div><div class="right">${esc(cfg.title)}<br>${date}</div></div>` +
+      `<div class="mapwrap"><div class="map" id="m${k + 1}"></div><div class="north">N</div></div>${legend}${foot}`));
+    const forceTxt = f => ({ law: 'LAW', guideline: 'GUIDELINE', guidance: 'GUIDANCE' }[f] || 'LAW');
+    const rulesHtml = ['nowake', 'tow', 'surf', 'pass'].map(k => `<div><b>[${forceTxt(r[k].force)}] ${esc(r[k].who)} — ${esc(r[k].label)} (${r[k].ft} ft).</b> ${esc(r[k].text)}` +
+      (r[k].citation ? `<div class="cite">${esc(r[k].citation)}</div>` : '') + '</div>').join('') +
+      (cfg.extraRules || []).map(e => `<div><b>[${forceTxt(e.force)}] ${esc(e.who)} — ${esc(e.label)}.</b> ${esc(e.text)}${e.citation ? `<div class="cite">${esc(e.citation)}</div>` : ''}</div>`).join('') +
+      `<div><b>About this map.</b> ${esc(cfg.credits)} Rules as of ${esc(cfg.rulesAsOf)} · map ${esc(cfg.mapVersion)}.</div>` +
+      (liveUrl ? `<div><b>Interactive map.</b> ${esc(liveUrl)}</div>` : '');
+    // a page overflows when its content spills out, when text squeezes its map below ~3 in, or (text pages, footer pinned
+    // to the bottom) when less than 6 px is left above the footer — printed pages are 0.05 in shorter than on screen
+    const overflows = pg => {
+      if (pg.scrollHeight > pg.clientHeight + 1) return true;
+      const mw = pg.querySelector('.mapwrap');
+      if (mw) return mw.getBoundingClientRect().height < 290;
+      const f = pg.querySelector('.foot'), prev = f && f.previousElementSibling;
+      return !!prev && f.getBoundingClientRect().top - prev.getBoundingClientRect().bottom < 6;
+    };
+    // the rules take as many pages as they need, each with its own header and footer
+    const rulesHead = cont => `<div class="head"><div><h2>The rules on this map${cont ? ' (continued)' : ''}</h2>` +
+      (cont ? '' : `<p class="sub">Distances are measured from the shoreline and from every dock, pier, log boom, swim area and structure.</p>`) +
+      `</div><div class="right">${esc(cfg.title)}<br>${date}</div></div>`;
+    let rp = page(`${rulesHead(false)}<div class="rules">${rulesHtml}</div>${foot}`);
+    for (let n = 0; n < 6 && overflows(rp); n++) {
+      const from = rp.querySelector('.rules'), next = page(`${rulesHead(true)}<div class="rules"></div>${foot}`), to = next.querySelector('.rules');
+      while (overflows(rp) && from.children.length > 1) to.insertBefore(from.lastElementChild, to.firstChild);
+      rp = next;
+    }
+
+    // maps
+    const tiles = [];
+    const tags = Object.create(null); for (const t of cfg.tags) tags[t.id] = t;
+    // printed names: the full name when it fits (26 characters), else the short (GPS) name, else cut at a word
+    const placeName = pr => {
+      const full = String(pr.name || '').replace(/\s*\([^)]*\)/g, '').trim();
+      return full.length <= 26 ? full : pr.short || ZoneExport.shortName(full, 26);
+    };
+    const LABEL_PRI = { launch: 1, fuel: 2, marina: 2, dam: 3, bridge: 3, public_dock: 4, park: 4, beach: 4, landmark: 4, hazard: 5, gauge: 6, services: 7, restroom: 8 };
+    const mk = (id, boundsUTM, labels) => {
+      const m = L.map(id, { zoomControl: false, attributionControl: true, dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
+        boxZoom: false, keyboard: false, touchZoom: false, zoomSnap: 0.1, fadeAnimation: false, zoomAnimation: false, inertia: false });
+      const t = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}', { crossOrigin: true, maxNativeZoom: 16, maxZoom: 19, attribution: 'USGS The National Map' }).addTo(m);
+      tiles.push(new Promise(ok => { t.on('load', ok); setTimeout(ok, 20000); }));
+      L.control.scale({ imperial: true, metric: false, position: 'bottomleft' }).addTo(m);
+      const [x0, y0, x1, y1] = boundsUTM;
+      m.fitBounds(L.latLngBounds([ll(x0, y0), ll(x1, y1)]), { padding: [16, 16] });
+      const box = m.getBounds(), W = m.getSize().x;
+      const rend = L.canvas({ padding: 0.2 });
+      for (const k of ['idle', 'cruise', 'tow', 'surf'])
+        L.polygon(ringsLL(res.bands[k].rings), { renderer: rend, stroke: false, fillColor: C[k].color, fillOpacity: Math.min(0.62, C[k].opacity + 0.12), fillRule: 'evenodd', interactive: false }).addTo(m);
+      L.polygon(ringsLL(res.runs.rings), { renderer: rend, color: C.runs.color, weight: 2.4, dashArray: '6 4', fillColor: C.runs.color, fillOpacity: 0.12, fillRule: 'evenodd', interactive: false }).addTo(m);
+      const nw = [];
+      const ZC = { no_wake_zone: ['#8a1630', 0.42], no_motor_zone: ['#c2185b', 0.5], no_entry_zone: ['#111111', 0.55] };
+      for (const f of fc.features) if (ZC[f.properties.tag] && f.geometry && f.geometry.type !== 'Point') {
+        const ps = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+        // "closed when posted" is open all summer: lighter, dashed — never the same as always-closed
+        const st = f.properties.tag === 'no_entry_zone' && f.properties.when === 'posted' ? ['#111111', 0.16, '5 4'] : [...ZC[f.properties.tag], null];
+        for (const p of ps) nw.push([p.map(rg => rg.map(c => [c[1], c[0]])), st]);
+      }
+      if (reach.approach) for (const p of reach.approach.polygons) nw.push([p.map(rg => rg.map(([x, y]) => ll(x, y))), [...ZC.no_wake_zone, null]]);
+      for (const [p, [c, o, dash]] of nw) L.polygon(p, { renderer: rend, color: c, weight: dash ? 2 : 1.5, dashArray: dash, fillColor: c, fillOpacity: o, interactive: false }).addTo(m);
+      L.polygon(reach.water.polygons.flatMap(p => ringsLL(p)), { renderer: rend, fill: false, color: '#fff', weight: 0.9, opacity: 0.85, interactive: false }).addTo(m);
+      if (res.runs.longest) L.polyline([ll(...res.runs.longest.a), ll(...res.runs.longest.b)], { renderer: rend, color: '#fff', weight: 2.5, dashArray: '2 6', interactive: false }).addTo(m);
+      const labs = [];
+      for (const f of fc.features) {
+        const g = f.geometry, pr = f.properties; if (!g || pr.hidden) continue;
+        const t = tags[pr.tag] || tags.other;
+        if (g.type === 'Point') {
+          if (pr.tag === 'dock' || pr.tag === 'shared_dock') L.circleMarker([g.coordinates[1], g.coordinates[0]], { renderer: rend, radius: 2.2, weight: 0.8, color: '#fff', fillColor: t.color, fillOpacity: 1, interactive: false }).addTo(m);
+          else {
+            const at = L.latLng(g.coordinates[1], g.coordinates[0]);
+            if (!box.contains(at)) continue;
+            const name = labels ? placeName(pr) : '';
+            const left = name && m.latLngToContainerPoint(at).x > W - 150;
+            const mk1 = L.marker(at, { interactive: false, icon: L.divIcon({ className: '', iconSize: [15, 15], iconAnchor: [7, 7],
+              html: `<div class="pin" style="background:${t.color}">${esc(t.glyph || '')}</div>` + (name ? `<div class="place${left ? ' left' : ''}" style="position:absolute;left:18px;top:0">${esc(name)}</div>` : '') }) }).addTo(m);
+            const el = mk1.getElement() && mk1.getElement().querySelector('.place');
+            if (el) labs.push({ el, pri: LABEL_PRI[pr.tag] || 9 });
+          }
+        } else if (g.type === 'LineString') L.polyline(g.coordinates.map(c => [c[1], c[0]]), { renderer: rend, color: pr.tag === 'log_boom' ? '#7a3d17' : pr.tag === 'safety_boom' ? '#ff1a1a' : t.color, weight: pr.tag === 'safety_boom' ? 5 : 3.5, dashArray: pr.tag === 'log_boom' ? '9 3' : pr.tag === 'safety_boom' ? null : '6 4', interactive: false }).addTo(m);
+        else if (!ZC[pr.tag]) {
+          const ps = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+          for (const p of ps) L.polygon(p.map(rg => rg.map(c => [c[1], c[0]])), { renderer: rend, color: t.color, weight: 2, dashArray: '5 4', fillOpacity: 0.15, interactive: false }).addTo(m);
+        }
+      }
+      // place names, most important first: flip to the other side or leave out any that would collide
+      const mr = m.getContainer().getBoundingClientRect();
+      const taken = [...m.getContainer().querySelectorAll('.pin')].map(e => e.getBoundingClientRect());
+      const clash = r => r.left < mr.left || r.right > mr.right || r.top < mr.top || r.bottom > mr.bottom ||
+        taken.some(q => r.left < q.right - 1 && r.right > q.left + 1 && r.top < q.bottom - 1 && r.bottom > q.top + 1);
+      labs.sort((a, b) => a.pri - b.pri);
+      for (const { el } of labs) {
+        if (clash(el.getBoundingClientRect())) el.classList.toggle('left');
+        const r = el.getBoundingClientRect();
+        if (clash(r)) { el.remove(); continue; }
+        taken.push(r);
+      }
+      return m;
+    };
+    const all = (() => { let a = [1e12, 1e12, -1e12, -1e12]; for (const p of reach.water.polygons) for (const [x, y] of p[0]) a = [Math.min(a[0], x), Math.min(a[1], y), Math.max(a[2], x), Math.max(a[3], y)]; return a; })();
+    mk('m0', all, false);                 // overview: pins only — names live on the section pages
+    sections.forEach((sec, k) => mk('m' + (k + 1), sec.b, true));
+    await Promise.all(tiles);
+    await new Promise(ok => setTimeout(ok, 600));
+    document.getElementById('barMsg').textContent = 'Ready — use Print and choose "Save as PDF" for a PDF. Letter, landscape, 100% scale.';
+    // layout report for the bake: pages whose content would be cut off, and place names drawn outside their map
+    const pgs = [...document.querySelectorAll('.page')];
+    window.__printLayout = {
+      pages: pgs.length,
+      overflow: pgs.map((pg, i) => overflows(pg) ? i + 1 : 0).filter(Boolean),
+      clipped: [...document.querySelectorAll('.place')].filter(el => {
+        const r = el.getBoundingClientRect(), mr = el.closest('.map').getBoundingClientRect();
+        return r.width && (r.left < mr.left - 1 || r.right > mr.right + 1 || r.top < mr.top - 1 || r.bottom > mr.bottom + 1);
+      }).map(el => el.textContent),
+    };
+    window.__printReady = true;
+    if (auto && !navigator.webdriver) setTimeout(() => window.print(), 300);
+  } catch (e) {
+    console.error(e);
+    document.getElementById('pages').innerHTML = `<p class="err">Could not build the chart book: ${esc(e.message)}</p>`;
+    window.__printLayout = { pages: 0, overflow: [], clipped: [], error: e.message };
+    window.__printReady = true;
+  }
+})();
+</script>
+</body>
+</html>

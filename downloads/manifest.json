@@ -1,0 +1,49 @@
+{
+ "built": "2026-10-18",
+ "label": "Current rules: no wake within 100 ft · no towing within 150 ft · surf guideline 200 ft (from shore and docks) · lanes 3,000 ft",
+ "stats": {
+  "water_ac": 665.9085098995942,
+  "zone_ac": 85.63884896258647,
+  "idle_ac": 290.72556130368537,
+  "cruise_ac": 98.66352630441075,
+  "tow_ac": 96.93639533030021,
+  "surf_ac": 179.57124678417264,
+  "wake_ok_ac": 375.17116841888355,
+  "tow_ok_ac": 276.50764211447284,
+  "surf_ok_ac": 179.57124678417264,
+  "runs_ac": 129.18695071976347,
+  "run_zones": 4,
+  "longest_run_ft": 4264.085618932522
+ },
+ "features": {
+  "total": 91,
+  "generated": "2026-10-18"
+ },
+ "files": [
+  {
+   "name": "spokane-river-boating-zones.geojson",
+   "ext": "geojson",
+   "size_kb": 314
+  },
+  {
+   "name": "spokane-river-boating-zones.gpx",
+   "ext": "gpx",
+   "size_kb": 169
+  },
+  {
+   "name": "spokane-river-boating-zones.kml",
+   "ext": "kml",
+   "size_kb": 324
+  },
+  {
+   "name": "spokane-river-boating-zones.kmz",
+   "ext": "kmz",
+   "size_kb": 74
+  },
+  {
+   "name": "spokane-river-boating-zones.pdf",
+   "ext": "pdf",
+   "size_kb": 1879
+  }
+ ]
+}

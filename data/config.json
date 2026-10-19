@@ -1,0 +1,728 @@
+{
+  "title": "Spokane River Boating Zones",
+  "subtitle": "Post Falls Dam to Lake Coeur d'Alene · Kootenai County, Idaho",
+  "short": "Spokane River",
+  "status": "Draft for review — not yet adopted",
+  "contact": {
+    "name": "Cole Van Hersett",
+    "email": "cvanhersett316@gmail.com"
+  },
+  "partner": "Hayden Lake Watershed Improvement District (HLWID)",
+  "rules": {
+    "nowake": {
+      "ft": 100,
+      "shore": true,
+      "structures": true,
+      "min": 0,
+      "max": 300,
+      "step": 5,
+      "label": "No-wake buffer",
+      "who": "Kootenai County + Idaho",
+      "text": "Within 100 ft of the shoreline, a dock, pier or other structure, or a person in the water: 5 mph and no wake, for every vessel. (Statewide, Idaho applies the same 100 ft to docks and people in the water; the shoreline part is county code.)",
+      "mapping": "Drawn 100 ft from the shoreline and from every dock, pier, boom and structure on the map. People in the water move, so that part applies wherever you see them.",
+      "citation": "Kootenai County Code § 6.2.104(C)(4); Idaho Code § 67-7077(b)",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12749",
+      "force": "law",
+      "short": "100-ft no-wake (county)"
+    },
+    "tow": {
+      "ft": 150,
+      "shore": true,
+      "structures": true,
+      "min": 0,
+      "max": 400,
+      "step": 5,
+      "minDepthFt": 0,
+      "label": "No-towing buffer",
+      "who": "Kootenai County",
+      "text": "No towing a waterskier, tube, wakeboard, kneeboard or \"any other type of appliance\" between the 100-ft no-wake band and 150 ft from the shoreline or any dock, pier or other structure (the river's \"No Waterskiing Zone\").",
+      "mapping": "Drawn 150 ft from the shoreline and every dock and structure. Wake surfing isn't named in the code. HLWID's draft legend and a citizen presentation to the county Waterways Advisory Board (June 2025) treat it as covered; the county has not said so in writing. This map treats it as covered — an interpretation, not a ruling. County rules apply outside city limits: inside Coeur d'Alene (near the outlet and a thin north-bank strip) the 100–150 ft band is \"no excessive wake\" instead.",
+      "citation": "Kootenai County Code § 6.2.122(A)(3)(b), adopted by Resolution 2023-42 (Apr. 5, 2023)",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12985",
+      "force": "law",
+      "short": "150-ft no-tow (county)",
+      "zoneName": "Kootenai County's No Waterskiing Zone"
+    },
+    "surf": {
+      "ft": 200,
+      "shore": true,
+      "structures": true,
+      "min": 0,
+      "max": 500,
+      "step": 5,
+      "minDepthFt": 0,
+      "label": "Wake-surf guideline",
+      "who": "WSIA + Idaho Parks & Recreation",
+      "text": "Wake and surf boats: stay at least 200 ft from shore, docks and other boats, keep music reasonable, and vary your line instead of repeating the same pass. Industry statements of the same guideline (WSIA via MasterCraft; NMMA) add \"in at least 10 ft of water\".",
+      "mapping": "Drawn 200 ft from the shoreline and every dock and structure. The dashed line in the Wake surf view marks 10 ft of water today. On a narrow river this guideline pulls surf boats to mid-channel, which can conflict with keeping right when meeting traffic (Inland Rule 9).",
+      "citation": "WSIA \"Wake Responsibly\"; IDPR \"Mind Your Wake\"",
+      "url": "https://recreate.idaho.gov/story/mind-your-wake/",
+      "force": "guideline",
+      "short": "200-ft surf guideline"
+    },
+    "pass": {
+      "ft": 100,
+      "min": 0,
+      "max": 300,
+      "step": 5,
+      "label": "Room to pass",
+      "who": "Built on Idaho, county and federal rules",
+      "text": "No statute sets a 100-ft passing distance. Idaho makes negligent operation within 100 ft of another vessel unlawful, the county caps speed at 15 mph within 50 ft of another vessel, and the Inland Rules require a lookout, a safe speed, keeping to the starboard side of a narrow channel, passing port-to-port, and a sound signal at blind bends.",
+      "mapping": "The Room-to-pass view shows where the channel leaves 100 ft between two passing boats that each stay outside the no-wake band, and where a surf boat can hold its line with traffic on either side.",
+      "citation": "Idaho Code § 67-7077(a); Kootenai County Code § 6.2.104(C)(5); 33 CFR §§ 83.05, 83.06, 83.09, 83.13, 83.14, 83.34 (Inland Rules 5, 6, 9, 13, 14, 34)",
+      "url": "https://legislature.idaho.gov/statutesrules/idstat/title67/t67ch70/sect67-7077/",
+      "force": "guidance",
+      "short": "Room to pass"
+    },
+    "run": {
+      "ft": 3000,
+      "laneFt": 50,
+      "activity": "tow",
+      "stepDeg": 0.5,
+      "min": 0,
+      "max": 6000,
+      "step": 100,
+      "who": "HLWID specification"
+    }
+  },
+  "classes": {
+    "idle": {
+      "label": "No wake — 5 mph",
+      "color": "#e8364a",
+      "opacity": 0.5,
+      "kmlOpacity": 0.45
+    },
+    "cruise": {
+      "label": "Wake OK — no towing",
+      "color": "#ff9124",
+      "opacity": 0.55,
+      "kmlOpacity": 0.45
+    },
+    "tow": {
+      "label": "Tow zone ({tow} ft+)",
+      "color": "#ffd83b",
+      "opacity": 0.55,
+      "kmlOpacity": 0.5
+    },
+    "surf": {
+      "label": "Tow zone + {surf}-ft surf guideline",
+      "color": "#7d55e8",
+      "opacity": 0.6,
+      "kmlOpacity": 0.5
+    },
+    "runs": {
+      "label": "Straight lane",
+      "color": "#19d3f5"
+    },
+    "nwz": {
+      "label": "Designated zone (no wake / no motors / no entry)",
+      "color": "#8a1630"
+    },
+    "narrow": {
+      "label": "Too narrow to pass at speed",
+      "color": "#d55e00",
+      "desc": "Not wide enough for two boats to pass {pass} ft apart while both stay outside the {nowake}-ft no-wake band — slow down to pass."
+    },
+    "twoway": {
+      "label": "Two boats can pass ({pass} ft apart)",
+      "color": "#56b4e9",
+      "desc": "Wide enough for two boats to pass {pass} ft apart, each outside the {nowake}-ft no-wake band."
+    },
+    "surfpass": {
+      "label": "Surf boat can pass traffic either side",
+      "color": "#0072b2",
+      "desc": "Wide enough for a wake-surf boat to hold its line while boats pass on either side, {pass} ft apart, with no one giving way."
+    }
+  },
+  "depth": {
+    "edges": [
+      0,
+      5,
+      10,
+      15,
+      20,
+      30
+    ],
+    "colors": [
+      "#f3c969",
+      "#cfe8f6",
+      "#9fd0ee",
+      "#62afe0",
+      "#2f84c8",
+      "#14559b"
+    ],
+    "labels": [
+      "under 5 ft",
+      "5–10 ft",
+      "10–15 ft",
+      "15–20 ft",
+      "20–30 ft",
+      "30 ft +"
+    ],
+    "fullPoolGageFt": 28.0,
+    "note": "Depths are feet below the 2,128 ft summer full pool, from 5-ft bathymetric contours (Coeur d'Alene Tribe / Avista, 2004). When live data is available they are lowered by today's drop in Lake Coeur d'Alene.",
+    "shallowFt": 5,
+    "surfLineFt": 10
+  },
+  "tags": [
+    {
+      "id": "dock",
+      "label": "Private dock",
+      "geom": "any",
+      "structure": true,
+      "radiusM": 3,
+      "color": "#20c4f4",
+      "glyph": "",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png",
+      "gpx": "Anchor",
+      "short": "Dock"
+    },
+    {
+      "id": "shared_dock",
+      "label": "Community / HOA dock",
+      "geom": "any",
+      "structure": true,
+      "radiusM": 4,
+      "color": "#1aa0e0",
+      "glyph": "C",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png",
+      "gpx": "Anchor",
+      "short": "HOA Dock"
+    },
+    {
+      "id": "marina",
+      "label": "Marina / slips",
+      "geom": "any",
+      "structure": true,
+      "radiusM": 15,
+      "color": "#0b6bcb",
+      "glyph": "M",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/marina.png",
+      "gpx": "Marina",
+      "short": "Marina"
+    },
+    {
+      "id": "public_dock",
+      "label": "Public / courtesy dock",
+      "geom": "any",
+      "structure": true,
+      "radiusM": 4,
+      "color": "#12a58c",
+      "glyph": "P",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png",
+      "gpx": "Marina",
+      "short": "Pub Dock"
+    },
+    {
+      "id": "launch",
+      "label": "Boat launch",
+      "geom": "point",
+      "structure": false,
+      "radiusM": 4,
+      "color": "#16a34a",
+      "glyph": "L",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/ferry.png",
+      "gpx": "Boat Ramp",
+      "short": "Launch"
+    },
+    {
+      "id": "fuel",
+      "label": "Fuel dock",
+      "geom": "any",
+      "structure": true,
+      "radiusM": 6,
+      "color": "#e11d74",
+      "glyph": "F",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/gas_stations.png",
+      "gpx": "Gas Station",
+      "short": "Fuel"
+    },
+    {
+      "id": "log_boom",
+      "label": "Log boom",
+      "geom": "line",
+      "structure": true,
+      "radiusM": 1.5,
+      "color": "#a0522d",
+      "glyph": "B",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png",
+      "gpx": "Danger Area",
+      "short": "Log Boom"
+    },
+    {
+      "id": "safety_boom",
+      "label": "Dam safety boom / cable",
+      "geom": "line",
+      "structure": false,
+      "radiusM": 1.5,
+      "color": "#e00000",
+      "glyph": "✕",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/forbidden.png",
+      "gpx": "Danger Area",
+      "short": "Safety Boom"
+    },
+    {
+      "id": "swim_area",
+      "label": "Swim area / swim line",
+      "geom": "any",
+      "structure": true,
+      "radiusM": 1,
+      "color": "#ff7ab6",
+      "glyph": "S",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/swimming.png",
+      "gpx": "Swimming Area",
+      "short": "Swim Area"
+    },
+    {
+      "id": "swim_platform",
+      "label": "Swim platform / raft",
+      "geom": "point",
+      "structure": true,
+      "radiusM": 3,
+      "color": "#ff7ab6",
+      "glyph": "R",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/swimming.png",
+      "gpx": "Swimming Area",
+      "short": "Swim Raft"
+    },
+    {
+      "id": "buoy",
+      "label": "Buoy / marker (official only)",
+      "geom": "point",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#ffffff",
+      "glyph": "○",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/target.png",
+      "gpx": "Buoy, White",
+      "short": "Buoy"
+    },
+    {
+      "id": "hazard",
+      "label": "Hazard (rock, shallow, snag)",
+      "geom": "any",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#ffcc00",
+      "glyph": "!",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/caution.png",
+      "gpx": "Danger Area",
+      "short": "Hazard"
+    },
+    {
+      "id": "caution",
+      "label": "Caution area",
+      "geom": "any",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#ffcc00",
+      "glyph": "!",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/caution.png",
+      "gpx": "Danger Area",
+      "short": "Caution"
+    },
+    {
+      "id": "no_wake_zone",
+      "label": "Designated no-wake zone",
+      "geom": "area",
+      "structure": false,
+      "radiusM": 0,
+      "color": "#8a1630",
+      "glyph": "",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/forbidden.png",
+      "gpx": "Danger Area",
+      "short": "No Wake"
+    },
+    {
+      "id": "no_motor_zone",
+      "label": "Designated no-motor zone",
+      "geom": "area",
+      "structure": false,
+      "radiusM": 0,
+      "color": "#c2185b",
+      "glyph": "",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/forbidden.png",
+      "gpx": "Danger Area",
+      "short": "No Motor"
+    },
+    {
+      "id": "no_entry_zone",
+      "label": "No-entry zone (dam safety)",
+      "geom": "area",
+      "structure": false,
+      "radiusM": 0,
+      "color": "#111111",
+      "glyph": "",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/forbidden.png",
+      "gpx": "Danger Area",
+      "short": "No Entry"
+    },
+    {
+      "id": "park",
+      "label": "Park / beach",
+      "geom": "point",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#4caf50",
+      "glyph": "♣",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/parks.png",
+      "gpx": "Park",
+      "short": "Park"
+    },
+    {
+      "id": "beach",
+      "label": "Beach (people in the water)",
+      "geom": "any",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#ffb74d",
+      "glyph": "≈",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/swimming.png",
+      "gpx": "Swimming Area",
+      "short": "Beach"
+    },
+    {
+      "id": "restroom",
+      "label": "Restroom / pump-out",
+      "geom": "point",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#8d6e63",
+      "glyph": "WC",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/toilets.png",
+      "gpx": "Restroom",
+      "short": "Restroom"
+    },
+    {
+      "id": "services",
+      "label": "Rentals / dining / services",
+      "geom": "point",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#795548",
+      "glyph": "$",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/dollar.png",
+      "gpx": "Information",
+      "short": "Services"
+    },
+    {
+      "id": "bridge",
+      "label": "Bridge",
+      "geom": "any",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#9e9e9e",
+      "glyph": "=",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/triangle.png",
+      "gpx": "Bridge",
+      "short": "Bridge"
+    },
+    {
+      "id": "dam",
+      "label": "Dam / restricted area",
+      "geom": "any",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#b71c1c",
+      "glyph": "⛔",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/forbidden.png",
+      "gpx": "Dam",
+      "short": "Dam"
+    },
+    {
+      "id": "gauge",
+      "label": "River / lake gauge",
+      "geom": "point",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#607d8b",
+      "glyph": "G",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/water.png",
+      "gpx": "Information",
+      "short": "Gauge"
+    },
+    {
+      "id": "other",
+      "label": "Other",
+      "geom": "any",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#cfd8dc",
+      "glyph": "•",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png",
+      "gpx": "Waypoint",
+      "short": "Pin"
+    },
+    {
+      "id": "landmark",
+      "label": "Landmark",
+      "geom": "point",
+      "structure": false,
+      "radiusM": 1,
+      "color": "#64748b",
+      "glyph": "◆",
+      "kml": "http://maps.google.com/mapfiles/kml/shapes/flag.png",
+      "gpx": "Flag, Blue",
+      "short": "Place"
+    }
+  ],
+  "gauges": {
+    "lake": {
+      "site": "12415500",
+      "name": "Lake Coeur d'Alene at Coeur d'Alene",
+      "param": "00065"
+    },
+    "reach": {
+      "site": "12417650",
+      "name": "Spokane River below Blackwell (in this reach)",
+      "param": "00060"
+    },
+    "dam": {
+      "site": "12419000",
+      "name": "Spokane River below Post Falls Dam",
+      "param": "00060"
+    }
+  },
+  "weather": {
+    "lat": 47.695,
+    "lon": -116.88,
+    "office": "OTX",
+    "x": 158,
+    "y": 89
+  },
+  "credits": "Shoreline: USGS 3DHP (2023), the same outline as the HLWID ArcGIS draft; lake approach: USGS NHD High Resolution. Depth: Coeur d'Alene Tribe / Avista Corp. bathymetric contours (5-ft interval, 2004 compilation). Docks: OpenStreetMap piers plus docks added by hand; the shoreline outline notches around many larger docks. Automatic detections are left out until reviewed. Piers, booms, swim areas: © OpenStreetMap contributors (ODbL). Imagery: USGS The National Map (public domain); Esri World Imagery optional. Live data: USGS Water Services, NOAA/NWS.",
+  "disclaimer": "Screening map, not a navigation chart or legal determination. Posted buoys, signs and officers govern. A dock, boom or swim float that isn't on the map still counts — keep 100 ft (no wake) and 150 ft (no towing). Rules about swimmers, divers and moving boats can't be mapped — keep the required distance from anyone you see. Setbacks are measured from the summer full-pool shoreline; the law measures from today's waterline, so at low water the lines sit further out. Zone boundaries are approximate (not yet surveyed).",
+  "towHours": {
+    "afterSunsetMin": 60,
+    "beforeSunriseMin": 60,
+    "text": "Idaho: no towing from one hour after sunset until one hour before sunrise. An observer is required; a large mirror can replace the observer only in a permitted slalom course, from one hour before sunrise to 9 a.m. (May 15–Sept 10), or any time Sept 11–May 14. Raise a red or orange flag whenever a rider is down.",
+    "citation": "Idaho Code § 67-7024(1)–(3), (6)"
+  },
+  "highWater": {
+    "elevFt": 2133.0,
+    "gageToElev": 2100.0,
+    "text": "Kootenai County: the whole Spokane River is automatically a no-wake zone while the Lake Coeur d'Alene gauge at Tubbs Hill reads 2,133 ft or more.",
+    "citation": "Kootenai County Code § 6.2.106(B)(1)(b)",
+    "gaugeName": "Lake Coeur d'Alene"
+  },
+  "rulesAsOf": "2026-10-18",
+  "mapVersion": "draft 1",
+  "extraRules": [
+    {
+      "who": "Kootenai County",
+      "force": "law",
+      "label": "Designated no-wake zones",
+      "text": "(a) From the mouth of the river to 300 ft downstream of the Highway 95 bridge; (b) from the east end of Templin's Marina to Post Falls Dam; (c) the channel between the shoreline and the island and wetlands at \"mile 7\" on the south side — not drawn until its location is confirmed. In designated no-wake zones: 5 mph and a wake no higher than 4 inches.",
+      "citation": "Kootenai County Code § 6.2.122(A)(1)(a)–(c), § 6.2.106(A)(4); (a) as amended by Res. 2021-37",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12985"
+    },
+    {
+      "who": "Kootenai County",
+      "force": "law",
+      "label": "No-motor zones",
+      "text": "Black Bay; and the Blackwell Island Canal from the Highway 95 bridge downstream to the river, except from 50 ft upstream of the BLM launch down to the river. No motor of any kind may propel a vessel there.",
+      "citation": "Kootenai County Code § 6.2.122(A)(2)(c)–(d)",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12985"
+    },
+    {
+      "who": "Kootenai County + City of Post Falls",
+      "force": "law",
+      "label": "No Entry at Post Falls Dam",
+      "text": "No entry at any time between the dams and the boater safety cable; from the cable up to the Spokane Street Bridge (the city says its upstream side) whenever closure signs are posted. Penalties: county — the first two violations within two years are infractions (up to $100), then a misdemeanor; Post Falls — $100, then $300, then a misdemeanor. Post Falls exempts docks permitted by the Idaho Department of Lands; the county section has no such exemption.",
+      "citation": "Kootenai County Code §§ 6.2.106(A)(1), 6.2.123; Post Falls City Code ch. 8.44",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-13118"
+    },
+    {
+      "who": "Kootenai County",
+      "force": "law",
+      "label": "High water",
+      "text": "The entire river becomes a no-wake zone while the lake gauge at Tubbs Hill reads 2,133 ft or more; the map switches automatically when the live gauge shows it. During actual or threatened flooding the county can also impose temporary restrictions by resolution (30 days, renewable) — check current notices each spring.",
+      "citation": "Kootenai County Code § 6.2.106(B)(1)(b), (B)(2)–(4)",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12787"
+    },
+    {
+      "who": "Kootenai County",
+      "force": "law",
+      "label": "Speed and wake",
+      "text": "35 mph by day and 25 mph at night (one hour after sunset to one hour before sunrise); 15 mph within 50 ft of another vessel; never an excessive, dangerous or damaging wake. The code's definition of excessive wake mentions ballast — how that applies to surfing on the river is an open question for the county.",
+      "citation": "Kootenai County Code § 6.2.104(C)(1)–(3), (5); § 6.2.103",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12749"
+    },
+    {
+      "who": "Idaho",
+      "force": "law",
+      "label": "Towing",
+      "text": "An observer is required — a large mirror can replace the observer only in a permitted slalom course, from one hour before sunrise to 9 a.m. (May 15–Sept 10), or any time from Sept 11 to May 14. No towing from one hour after sunset to one hour before sunrise. Raise a red or orange flag whenever a rider is down, and tow at a reasonable distance from people and property.",
+      "citation": "Idaho Code § 67-7024 (as amended 2026, H0887)",
+      "url": "https://legislature.idaho.gov/statutesrules/idstat/title67/t67ch70/sect67-7024/"
+    },
+    {
+      "who": "Idaho Parks & Recreation handbook",
+      "force": "guidance",
+      "label": "Wake surfing near others",
+      "text": "A boat in wake-surf mode slows to no-wake within 100 ft of docks, other vessels, swimmers and other people. The docks-and-people part restates Idaho Code § 67-7077(b); the other-vessels part appears only in the IDPR handbook — no statute or rule was found behind it.",
+      "citation": "IDPR Handbook of Idaho Boating Laws and Responsibilities (2014–2021), \"Wakesurfing Behind a Boat\", pp. 48–49",
+      "url": "https://parksandrecreation.idaho.gov/wp-content/uploads/idaho-handbook-entire.pdf"
+    },
+    {
+      "who": "Kootenai County",
+      "force": "law",
+      "label": "Emergency vessels",
+      "text": "Approaching emergency or patrol boats showing flashing lights: slow to no-wake and stay at least 200 ft away when practicable, until completely past. When one approaches with signals, yield — turn parallel to it and stop until it has passed. Never flee a law-enforcement vessel.",
+      "citation": "Kootenai County Code §§ 6.2.104(E), 6.2.108",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12749"
+    },
+    {
+      "who": "Idaho",
+      "force": "law",
+      "label": "Diver-down flag",
+      "text": "Stay 100 ft from a displayed diver-down or Alpha flag and approach at reduced speed.",
+      "citation": "Idaho Code § 67-7021",
+      "url": "https://legislature.idaho.gov/statutesrules/idstat/title67/t67ch70/sect67-7021/"
+    },
+    {
+      "who": "Idaho",
+      "force": "law",
+      "label": "Life jackets and lights",
+      "text": "A wearable, Coast Guard-approved life jacket for everyone aboard, plus a throwable on boats 16 ft and longer. Anyone being towed and PWC riders must wear one; children 14 and under must wear one on boats 19 ft or shorter while underway. Navigation lights from sunset to sunrise and in restricted visibility.",
+      "citation": "Idaho Code § 67-7015(3), (9)",
+      "url": "https://legislature.idaho.gov/statutesrules/idstat/title67/t67ch70/sect67-7015/"
+    },
+    {
+      "who": "Kootenai County",
+      "force": "law",
+      "label": "Young operators",
+      "text": "Under 10: motor craft only with direct adult supervision. Under 14: adult supervision on anything over 15 hp (PWC included).",
+      "citation": "Kootenai County Code § 6.2.107",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12810"
+    },
+    {
+      "who": "Idaho",
+      "force": "law",
+      "label": "Registration and invasive species",
+      "text": "Idaho certificate of number and validation stickers (out-of-state boats may run on their home registration for up to 60 consecutive days); Invasive Species Fund sticker on every vessel; clean, drain and dry — pull ballast and bilge plugs — when leaving the water; out-of-state boats must be inspected before launching; stop at every open inspection station.",
+      "citation": "Idaho Code §§ 67-7008, 67-7009, 67-7010, 67-7008A, 22-1905A, 22-1908",
+      "url": "https://legislature.idaho.gov/statutesrules/idstat/title22/t22ch19/sect22-1905a/"
+    },
+    {
+      "who": "City of Post Falls",
+      "force": "law",
+      "label": "Swimming in Post Falls",
+      "text": "Inside city limits, swim or dive in the river only in designated, signed swim areas.",
+      "citation": "Post Falls City Code § 12.56.020",
+      "url": "https://library.municode.com/id/post_falls/codes/code_of_ordinances?nodeId=TIT12STSIPUPL_CH12.56SAUSWA"
+    },
+    {
+      "who": "Kootenai County",
+      "force": "law",
+      "label": "County launches",
+      "text": "Greensferry Park and boat launch, and the Rodkey Drive access, are closed 10 p.m. to 5 a.m. At county docks: moor no more than 48 hours in any 72, no rafting boats together, quiet hours 10 p.m. to 8 a.m.",
+      "citation": "Kootenai County Code § 6.2.122(B)",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12985"
+    },
+    {
+      "label": "Engine noise",
+      "who": "Idaho + Kootenai County",
+      "force": "law",
+      "text": "Exhaust noise must pass the stationary test (88 or 90 dB(A), depending on engine age; SAE J2005). On waters wider than 500 ft the county also caps pass-by noise at 75 dB(A), and devices that amplify exhaust sound are banned. Repeat violations escalate to a misdemeanor.",
+      "citation": "Idaho Code § 67-7038; Kootenai County Code § 6.2.105(A)–(G), (K)",
+      "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12749"
+    },
+    {
+      "who": "Idaho",
+      "force": "law",
+      "label": "Ballast and capacity",
+      "text": "Don't load a vessel beyond its safe carrying capacity or its capacity plate — passengers, gear and surf ballast together. Most surf boats are 20 ft or longer and have no plate, so \"safe carrying capacity given the conditions\" is the test.",
+      "citation": "Idaho Code §§ 67-7022, 67-7023",
+      "url": "https://legislature.idaho.gov/statutesrules/idstat/title67/t67ch70/sect67-7022/"
+    },
+    {
+      "who": "Idaho",
+      "force": "law",
+      "label": "Private \"no wake\" buoys",
+      "text": "Only government agencies may place regulatory buoys. Privately placed \"no wake\" buoys have no legal force — this map shows only official zones, and a buoy pin added in the editor never becomes a rule.",
+      "citation": "Idaho Code § 67-7031(1)",
+      "url": "https://legislature.idaho.gov/statutesrules/idstat/title67/t67ch70/sect67-7031/"
+    },
+    {
+      "who": "Kootenai County, Coeur d'Alene, Post Falls",
+      "force": "guidance",
+      "label": "Whose rules apply where",
+      "text": "The county boating chapter covers river water outside city limits — about 86% of this reach by area (Coeur d'Alene about 12%, Post Falls about 2%). Inside Coeur d'Alene — the outlet stretch and a 100–200 ft north-bank strip downstream of it — the city's code applies: 100-ft no-wake, a 100–150 ft no-excessive-wake band instead of no-tow, and 20 mph at night; the city's no-wake zone ends at the south end of the Harbor Center. Inside Post Falls (just above the dams and thin north-bank strips) no city boating ordinance was found, so outside the dam-area zones only the state's 100-ft rule seems to apply — and it covers docks and people, not the shoreline. The map draws the county rules everywhere; confirm boundaries with the sheriff.",
+      "citation": "Kootenai County Code § 6.2.102; Coeur d'Alene Code § 4.20.020(B); Idaho Code § 67-7031(25)",
+      "url": "https://codelibrary.amlegal.com/codes/coeurdaleneid/latest/coeurdalene_id/0-0-0-1473"
+    }
+  ],
+  "presets": [
+    {
+      "id": "law",
+      "label": "Current rules",
+      "desc": "Today's Idaho and Kootenai County rules, measured from shore and every dock."
+    },
+    {
+      "id": "arcgis",
+      "label": "Shore only (HLWID ArcGIS)",
+      "desc": "Buffers from the shoreline only, no docks and no designated zones — the method in the HLWID ArcGIS draft."
+    },
+    {
+      "id": "county200",
+      "label": "No-tow at 200 ft",
+      "desc": "What if the county moved the no-tow line from 150 ft to 200 ft?"
+    },
+    {
+      "id": "surf10",
+      "label": "Surf only 10 ft+ deep",
+      "desc": "Industry depth guidance (WSIA via MasterCraft; NMMA): wake surf only where today's depth is 10 ft or more."
+    },
+    {
+      "id": "surf20",
+      "label": "Surf only 20 ft+ deep",
+      "desc": "The deeper standard from Vermont's rule and a 2025 local proposal: wake surf only where today's depth is 20 ft or more."
+    },
+    {
+      "id": "vermont",
+      "label": "Vermont-style zones",
+      "desc": "Vermont's wakesports-zone test: 500 ft from shore, 20 ft deep, with 3,000-ft runs 200 ft wide."
+    }
+  ],
+  "madeBy": "Made by Cole Van Hersett for Hayden Lake Watershed Improvement District (HLWID) review",
+  "place": {
+    "description": "Where you can cruise, tow, and wake surf on the Spokane River from Post Falls Dam to Lake Coeur d'Alene — Idaho and Kootenai County rules mapped from the shoreline and every dock.",
+    "what": "the Spokane River between Post Falls Dam and Lake Coeur d'Alene",
+    "preparedFor": "Prepared for the Hayden Lake Watershed Improvement District (HLWID).",
+    "riverMileOrigin": "Post Falls Dam",
+    "riverMileEnd": "the lake",
+    "timeZone": "America/Los_Angeles",
+    "sun": {
+      "lat": 47.695,
+      "lon": -116.88
+    },
+    "fileBase": "spokane-river-boating-zones",
+    "featuresName": "spokane_river_features",
+    "featuresPath": "Spokane_test/site/data/features.geojson",
+    "keywords": "Spokane River, boating zones",
+    "rulesSource": "the Idaho Code, Kootenai County Code (American Legal, 2026 S-10) and city codes",
+    "noEntryPosted": "check the signs at the Spokane St bridge",
+    "noEntryAlways": "dam safety zone, keep out",
+    "noMotorExamples": "Black Bay, Blackwell Island Canal"
+  },
+  "approach": {
+    "name": "Hwy 95 bridge to Lake Coeur d'Alene — no wake",
+    "short": "Hwy 95 bridge to Lake Coeur d'Alene",
+    "text": "Lake Coeur d'Alene to the Hwy 95 bridge (county designated no-wake zone) and the narrow Blackwell Island side channels (inside the 100-ft band; the canal is no-motor).",
+    "note": "Main channel: county designated no-wake zone. Blackwell Island side channels: inside the 100-ft no-wake band; the canal is also no-motor."
+  },
+  "compare": {
+    "label": "HLWID ArcGIS",
+    "method": "the HLWID ArcGIS draft",
+    "towFt": 150,
+    "towAc": 318.4,
+    "engineAc": 318.2
+  },
+  "sections": [
+    "West — Post Falls Dam, Templin's, Black Bay, Greensferry",
+    "Middle — Ross Point, Kiwanis Park, Harbor Island",
+    "East — Mill River, Atlas, Blackwell Island, Hwy 95 bridge"
+  ],
+  "url": "https://colevh2112.github.io/spokane-river-boating/"
+}
