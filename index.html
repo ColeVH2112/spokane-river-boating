@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0b2f4a" />
+<meta name="srz-build" content="a6a76fb43e2e" />
 <meta name="description" content="Where you can cruise, tow, and wake surf on the Spokane River from Post Falls Dam to Lake Coeur d'Alene — Idaho and Kootenai County rules mapped from the shoreline and every dock." />
 <title>Spokane River Boating Zones</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
@@ -64,7 +65,18 @@
     <div class="hwbanner" id="hwBanner" role="alert" hidden></div>
     <div class="legend" id="legend" aria-label="Legend"></div>
     <div class="reviewcard" id="reviewcard" hidden></div>
-    <div class="drawhint" id="drawhint" hidden></div>
+    <div class="editbar" id="editbar" role="toolbar" aria-label="Map editing" hidden>
+      <div class="eb-row">
+        <label class="eb-tag" title="What you're adding"><span class="eb-dot" id="ebDot"></span><select id="ebTag" aria-label="What to add"></select></label>
+        <span class="eb-seg" role="group" aria-label="Tool"><button class="ebb" data-mode="pin" title="Click the map to drop a pin (P)">Pin</button><button class="ebb" data-mode="line" title="Draw a line: trace a long dock or a boom (L)">Line</button><button class="ebb" data-mode="area" title="Draw an area (A)">Area</button><button class="ebb" data-mode="select" title="Only select and move features (Esc)">Select</button></span>
+        <button class="ebb" id="ebZones" title="Show or hide the zone colours (H)">Show zones</button>
+        <select id="ebImg" aria-label="Aerial imagery" title="Aerial imagery — Esri's is sharp enough to see each dock"></select>
+        <span class="eb-sweep" role="group" aria-label="Sweep the shore"><button class="ebb" id="ebPrev" aria-label="Previous stretch of shore">◀</button><span id="ebRm">Sweep the shore</span><button class="ebb" id="ebNext" aria-label="Next stretch of shore">▶</button></span>
+        <button class="ebb" id="ebUndo" title="Undo (⌘Z / Ctrl Z)" aria-label="Undo">↶</button>
+        <button class="ebb primary" id="ebDone" title="Stop editing">Done</button>
+      </div>
+      <div class="eb-hint"><span id="drawhint"></span><span class="eb-flash" id="ebMsg" role="status" aria-live="polite" hidden></span><span class="eb-count" id="ebCount"></span></div>
+    </div>
   </div>
 
   <aside class="panel" aria-label="Summary and tools">
@@ -120,6 +132,12 @@
       <section class="tabsec" id="tEdit" role="tabpanel" aria-labelledby="tab-tEdit" hidden>
         <div class="editstate" id="editState"></div>
         <label class="check big"><input type="checkbox" id="editMode" /> <span><b>Edit mode</b> — add, move, tag, and delete map features</span></label>
+        <ol class="howto-docks">
+          <li>Turn on Edit mode (or ✎ on the map). The zone colours hide and the map switches to sharp aerial imagery, where each dock shows.</li>
+          <li>Zoom in and <b>click the outer (water) end of each dock</b> — every click adds one. Click a pin to name or retype it; drag to move it.</li>
+          <li><b>▶</b> on the map steps along the shore a screen at a time, so no stretch is missed. <kbd>H</kbd> shows the zones to check the result.</li>
+          <li>Edits save in this browser. When you're done, <b>Export features.geojson</b> below and publish it.</li>
+        </ol>
         <div class="palette" id="palette" aria-label="Feature type to add"></div>
         <div class="btnrow" id="drawBtns">
           <button class="btn" id="addPin" title="Click the map to drop a pin of the selected type (P)">＋ Pin</button>
@@ -160,7 +178,7 @@
           <button class="dl" id="dlGeo"><b>GeoJSON</b><span>GIS (QGIS, ArcGIS)</span></button>
           <button class="dl" id="dlLink"><b>Link</b><span>Copy a link to this view</span></button>
         </div>
-        <label class="check"><input type="checkbox" id="dlDocks" /> <span>Include every dock as a point (large files)</span></label>
+        <label class="check"><input type="checkbox" id="dlDocks" /> <span>Include each private dock as a point (for GIS checks; large files — they always count in the zones)</span></label>
         <label class="check"><input type="checkbox" id="dlWidth" /> <span>Include room-to-pass layers</span></label>
         <div class="msg" id="dlMsg" role="status" aria-live="polite"></div>
         <p class="note">Official versions with the current rules are in <a href="#downloads">Downloads</a>.</p>

@@ -147,7 +147,7 @@
       `<div class="stat" style="border-left-color:${C.idle.color}"><b>${fmtAc(s.idle_ac)} ac</b><span>no wake (5 mph)</span></div>` +
       `<div class="stat" style="border-left-color:${C.runs.color}"><b>${s.run_zones}</b><span>straight lane${s.run_zones === 1 ? '' : 's'} ≥ ${fmtFt(params.run.ft)} ft · longest ${fmtFt(s.longest_run_ft)} ft</span></div></div>` +
       `<ol class="howto"><li>Colors show which setbacks each spot clears, measured from the shoreline${R.tow.structures ? ' and every dock' : ''}. They don't promise the water is safe or legal right now.</li>` +
-      `<li>Rules about people and boats apply everywhere: no wake within 100 ft of anyone in the water; 15 mph or less within 50 ft of another boat; keep right in narrow channels and pass port to port. A dock that isn't on the map still counts.</li>` +
+      `<li>Rules about people and boats apply everywhere: no wake within 100 ft of anyone in the water; 15 mph or less within 50 ft of another boat; keep right in narrow channels and pass port to port. The colors allow for every mapped dock (docks aren't drawn), and a dock we haven't mapped still counts on the water.</li>` +
       `<li>Pages 2–4 zoom in on each stretch (river miles, RM, count upstream from ${esc(place.riverMileOrigin || 'the start')}); the rules follow.</li></ol>${qrHtml}</div>${legend}${foot}`);
     sections.forEach((sec, k) => page(`<div class="head"><div><h2>Section ${k + 1} of 3 · ${esc(sec.name)}</h2>` +
       `<span class="crit ${hw ? 'hw' : law ? 'law' : ''}">${esc(critTxt)}</span></div><div class="right">${esc(cfg.title)}<br>${date}</div></div>` +
@@ -216,18 +216,17 @@
       for (const f of fc.features) {
         const g = f.geometry, pr = f.properties; if (!g || pr.hidden) continue;
         const t = tags[pr.tag] || tags.other;
+        // private docks shape the zones but aren't charted; imported or auto-detected features wait for review
+        if (t.showOnMap === false || pr.status === 'unreviewed' || pr.status === 'imported') continue;
         if (g.type === 'Point') {
-          if (pr.tag === 'dock' || pr.tag === 'shared_dock') L.circleMarker([g.coordinates[1], g.coordinates[0]], { renderer: rend, radius: 2.2, weight: 0.8, color: '#fff', fillColor: t.color, fillOpacity: 1, interactive: false }).addTo(m);
-          else {
-            const at = L.latLng(g.coordinates[1], g.coordinates[0]);
-            if (!box.contains(at)) continue;
-            const name = labels ? placeName(pr) : '';
-            const left = name && m.latLngToContainerPoint(at).x > W - 150;
-            const mk1 = L.marker(at, { interactive: false, icon: L.divIcon({ className: '', iconSize: [15, 15], iconAnchor: [7, 7],
-              html: `<div class="pin" style="background:${t.color}">${esc(t.glyph || '')}</div>` + (name ? `<div class="place${left ? ' left' : ''}" style="position:absolute;left:18px;top:0">${esc(name)}</div>` : '') }) }).addTo(m);
-            const el = mk1.getElement() && mk1.getElement().querySelector('.place');
-            if (el) labs.push({ el, pri: LABEL_PRI[pr.tag] || 9 });
-          }
+          const at = L.latLng(g.coordinates[1], g.coordinates[0]);
+          if (!box.contains(at)) continue;
+          const name = labels ? placeName(pr) : '';
+          const left = name && m.latLngToContainerPoint(at).x > W - 150;
+          const mk1 = L.marker(at, { interactive: false, icon: L.divIcon({ className: '', iconSize: [15, 15], iconAnchor: [7, 7],
+            html: `<div class="pin" style="background:${t.color}">${esc(t.glyph || '')}</div>` + (name ? `<div class="place${left ? ' left' : ''}" style="position:absolute;left:18px;top:0">${esc(name)}</div>` : '') }) }).addTo(m);
+          const el = mk1.getElement() && mk1.getElement().querySelector('.place');
+          if (el) labs.push({ el, pri: LABEL_PRI[pr.tag] || 9 });
         } else if (g.type === 'LineString') L.polyline(g.coordinates.map(c => [c[1], c[0]]), { renderer: rend, color: pr.tag === 'log_boom' ? '#7a3d17' : pr.tag === 'safety_boom' ? '#ff1a1a' : t.color, weight: pr.tag === 'safety_boom' ? 5 : 3.5, dashArray: pr.tag === 'log_boom' ? '9 3' : pr.tag === 'safety_boom' ? null : '6 4', interactive: false }).addTo(m);
         else if (!ZC[pr.tag]) {
           const ps = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;

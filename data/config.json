@@ -175,7 +175,8 @@
       "glyph": "",
       "kml": "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png",
       "gpx": "Anchor",
-      "short": "Dock"
+      "short": "Dock",
+      "showOnMap": false
     },
     {
       "id": "shared_dock",
@@ -187,7 +188,8 @@
       "glyph": "C",
       "kml": "http://maps.google.com/mapfiles/kml/shapes/placemark_square.png",
       "gpx": "Anchor",
-      "short": "HOA Dock"
+      "short": "HOA Dock",
+      "showOnMap": false
     },
     {
       "id": "marina",
@@ -491,7 +493,7 @@
     "y": 89
   },
   "credits": "Shoreline: USGS 3DHP (2023), the same outline as the HLWID ArcGIS draft; lake approach: USGS NHD High Resolution. Depth: Coeur d'Alene Tribe / Avista Corp. bathymetric contours (5-ft interval, 2004 compilation). Docks: OpenStreetMap piers plus docks added by hand; the shoreline outline notches around many larger docks. Automatic detections are left out until reviewed. Piers, booms, swim areas: © OpenStreetMap contributors (ODbL). Imagery: USGS The National Map (public domain); Esri World Imagery optional. Live data: USGS Water Services, NOAA/NWS.",
-  "disclaimer": "Screening map, not a navigation chart or legal determination. Posted buoys, signs and officers govern. A dock, boom or swim float that isn't on the map still counts — keep 100 ft (no wake) and 150 ft (no towing). Rules about swimmers, divers and moving boats can't be mapped — keep the required distance from anyone you see. Setbacks are measured from the summer full-pool shoreline; the law measures from today's waterline, so at low water the lines sit further out. Zone boundaries are approximate (not yet surveyed).",
+  "disclaimer": "Screening map, not a navigation chart or legal determination. Posted buoys, signs and officers govern. A dock, boom or swim float missing from our data still counts — keep 100 ft (no wake) and 150 ft (no towing). Rules about swimmers, divers and moving boats can't be mapped — keep the required distance from anyone you see. Setbacks are measured from the summer full-pool shoreline; the law measures from today's waterline, so at low water the lines sit further out. Zone boundaries are approximate (not yet surveyed).",
   "towHours": {
     "afterSunsetMin": 60,
     "beforeSunriseMin": 60,

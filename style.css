@@ -64,7 +64,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 
 /* map overlays */
 .views { position: absolute; z-index: 800; top: .7rem; left: 3.4rem; display: flex; gap: 2px; padding: 3px;
-         background: rgba(9,24,35,.82); border-radius: 10px; backdrop-filter: blur(6px); box-shadow: 0 4px 16px rgba(0,0,0,.3);
+         background: rgba(9,24,35,.86); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.3);
          max-width: calc(100% - 7.5rem); overflow-x: auto; scrollbar-width: none; }
 .views::-webkit-scrollbar { display: none; }
 .view { flex: none; font: 600 .78rem var(--font); color: #cfe2ee; background: transparent; border: 0; border-radius: 8px;
@@ -119,9 +119,36 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .reviewcard .rc-prog { height: 4px; background: var(--line); border-radius: 4px; margin: .45rem 0 .6rem; overflow: hidden; }
 .reviewcard .rc-prog i { display: block; height: 100%; background: var(--accent); }
 .reviewcard .btnrow { margin-top: .5rem; }
-.drawhint { position: absolute; z-index: 850; left: 50%; top: 3.6rem; transform: translateX(-50%); background: rgba(9,24,35,.9);
-            color: #fff; font: .78rem var(--font); padding: .45rem .8rem; border-radius: 9px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
-.drawhint button { margin-left: .5rem; }
+/* edit bar: the mapping tools on the map itself, where the eyes are */
+.editbar { position: absolute; z-index: 840; top: .6rem; left: 3.4rem; right: 3.9rem; display: flex; flex-direction: column; gap: .3rem;
+           padding: .4rem .45rem .35rem; background: rgba(9,24,35,.96); color: #e6f0f6; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+           font: .76rem var(--font); }
+.eb-row { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.ebb { font: 600 .76rem var(--font); color: #e6f0f6; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.22); border-radius: 7px;
+       padding: .3rem .55rem; cursor: pointer; white-space: nowrap; }
+.ebb:hover:not(:disabled) { background: rgba(255,255,255,.17); }
+.ebb.on { background: #fff; color: #0b2f4a; border-color: #fff; }
+.ebb.primary { background: #ffd83b; color: #0b2f4a; border-color: #ffd83b; }
+.ebb:disabled { opacity: .35; cursor: not-allowed; }
+.eb-seg { display: inline-flex; }
+.eb-seg .ebb { border-radius: 0; margin-left: -1px; }
+.eb-seg .ebb:first-child { border-radius: 7px 0 0 7px; margin-left: 0; } .eb-seg .ebb:last-child { border-radius: 0 7px 7px 0; }
+.eb-tag { display: inline-flex; align-items: center; gap: .3rem; }
+.eb-dot { width: .85rem; height: .85rem; border-radius: 50%; border: 2px solid #fff; flex: none; }
+.editbar select { background: #fff; color: #0f2233; border-color: transparent; padding: .28rem .35rem; max-width: 10.4rem; color-scheme: light; }
+.eb-sweep { display: inline-flex; align-items: center; gap: .3rem; }
+#ebRm { font-variant-numeric: tabular-nums; min-width: 5.6rem; text-align: center; color: #cfe2ee; }
+#ebDone { margin-left: auto; }
+.eb-hint { display: flex; gap: .6rem; align-items: baseline; justify-content: space-between; color: #cfe2ee; font-size: .72rem; padding: 0 .15rem; }
+.eb-hint b { color: #fff; }
+.eb-count { flex: none; color: #8ff0b6; font-variant-numeric: tabular-nums; }
+.eb-flash { flex: none; color: #ffd479; text-align: right; }
+.eb-flash:not([hidden]) + .eb-count { display: none; }
+.mapcol.editing .views, .mapcol.editing .rulepick { display: none !important; }
+.mapcol.editing #hwBanner.hwbanner { top: calc(var(--ebh, 5.6rem) + .4rem); }   /* under the edit bar (app.js measures it), whatever the view */
+.mapcol.editing .busy { top: auto; bottom: 3.4rem; right: .6rem; }
+.howto-docks { margin: .2rem 0 .6rem; padding-left: 1.2rem; font-size: .76rem; color: var(--ink-2); }
+.howto-docks li { margin: .15rem 0; }
 
 /* GPS banner — readable from the helm */
 .gpsbar { position: fixed; z-index: 2000; left: 0; right: 0; top: 0; display: none; padding: .65rem 1rem; text-align: center;
@@ -354,12 +381,14 @@ select { font: .78rem var(--font); padding: .35rem .4rem; border-radius: 8px; bo
   .mapcol { height: 64dvh; min-height: 380px; }
   .panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
   .views { left: .6rem; top: .6rem; max-width: calc(100% - 4.2rem); }
+  .editbar { left: .5rem; right: 3.9rem; top: .5rem; padding: .35rem .4rem .3rem; }
+  .mapcol.editing .legend { display: none; }         /* the edit bar has the zones switch */
   .rulepick { left: .6rem; top: 3.2rem; }
   .hwbanner { left: .6rem; right: 4.2rem; width: auto; transform: none; top: 3.3rem; }
   #rulepick:not([hidden]) ~ .hwbanner { top: 5.9rem; }
   .gpsbar { top: auto; bottom: 0; font-size: .92rem; padding: .5rem .7rem calc(.5rem + env(safe-area-inset-bottom)); }
   .gpsbar small { display: block; margin: .15rem 0 0; font-size: .7rem; }
-  .legend { left: .5rem; bottom: .9rem; font-size: .72rem; max-width: calc(100% - 5.5rem); }
+  .legend { left: .5rem; bottom: 2.6rem; font-size: .72rem; max-width: calc(100% - 5.5rem); }   /* above a two-line imagery credit */
   .leaflet-control-zoom { display: none; }
   .pagewrap.two { grid-template-columns: minmax(0, 1fr); }
   .rules { grid-template-columns: minmax(0, 1fr); }
@@ -368,6 +397,15 @@ select { font: .78rem var(--font); padding: .35rem .4rem; border-radius: 8px; bo
 @media (max-width: 520px) {
   .brand-title { font-size: .92rem; }
   .view { padding: .42rem .5rem; font-size: .74rem; }
+  .ebb { padding: .28rem .42rem; font-size: .72rem; }
+  .editbar select { max-width: 9.5rem; font-size: .72rem; }
+  #ebImg { max-width: 7.2rem; }
+  #ebRm { min-width: 0; font-size: .7rem; }
+  /* three rows: type + Done / tools + zones + undo / imagery + sweep */
+  .eb-tag { order: 1; } #ebDone { order: 2; } .eb-seg { order: 3; } #ebZones { order: 4; } #ebUndo { order: 5; }
+  #ebImg { order: 6; } .eb-sweep { order: 7; }
+  .eb-more { display: none; }
+  .eb-hint { flex-wrap: wrap; row-gap: .1rem; }
   .cards3 { grid-template-columns: minmax(0, 1fr); }
   .dlgrid, .palette { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .tiles b { font-size: 1.15rem; }

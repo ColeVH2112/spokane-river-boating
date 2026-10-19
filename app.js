@@ -16,13 +16,27 @@
     cfg: null, reach: null, eng: null, tags: Object.create(null), base: null, baseSig: '', fc: null,
     params: null, defaults: null, res: null, baseRes: null,
     view: 'bottom', single: 'nowake', levelOffsetFt: 0, levelLive: false,
-    edit: { on: false, tag: 'dock', mode: 'select', sel: null }, review: null,
+    edit: { on: false, tag: 'dock', mode: 'select', sel: null, added: new Set() }, review: null,
     hist: [], fut: [], gps: null, gpsWatch: null, follow: true, turnFt: 200, corr: [],
+    zonesHidden: false, moving: false, touched: 0, held: 0,
   };
   let map, R = {}, L_ = {};          // leaflet map, renderers, layers
   const featLayers = new Map();      // feature id -> leaflet layer
 
   // ===================================================================== boot
+  // deploy.sh stamps BUILD here and the page's srz-build meta with the same id. A page the browser
+  // kept from before an update (GitHub Pages allows 10 minutes) paired with this newer script would
+  // lack parts the script needs: fetch the page fresh, once, and reload.
+  const BUILD = 'a6a76fb43e2e';
+  function stalePage() {
+    const m = document.querySelector('meta[name="srz-build"]');
+    if (m && m.content === BUILD) { try { sessionStorage.removeItem('srz:fresh'); } catch (_) { /* fine */ } return false; }
+    let tried = true;                   // no session storage: run as is rather than risk a reload loop
+    try { tried = sessionStorage.getItem('srz:fresh') === BUILD; sessionStorage.setItem('srz:fresh', BUILD); } catch (_) { /* as is */ }
+    if (tried) return false;
+    fetch(location.href.split('#')[0], { cache: 'reload' }).catch(() => {}).then(() => location.reload());
+    return true;
+  }
   // data files: always revalidated (a republished map shows at once), with errors that say which file
   async function getJSON(url) {
     const r = await fetch(url, { cache: 'no-cache' });
@@ -31,6 +45,7 @@
     try { return JSON.parse(text); } catch (e) { throw new Error(`${url} is damaged (${e.message})`); }
   }
   async function boot() {
+    if (stalePage()) return;
     const [cfg, reach, base] = await Promise.all(['data/config.json', 'data/reach.json', 'data/features.geojson'].map(getJSON));
     S.cfg = cfg; S.reach = reach;
     for (const t of cfg.tags) S.tags[t.id] = t;
@@ -50,8 +65,11 @@
     const saved = lsGet(LS.feats);
     S.fc = saved && saved.fc && saved.fc.type === 'FeatureCollection' && Array.isArray(saved.fc.features) ? cleanFC(saved.fc, dropped) : clone(S.base);
     S.rev = saved && saved.rev || 0;
+    // the saved edits ARE the published map now (exported and put in place): nothing left to keep apart
+    const published = saved && JSON.stringify(S.fc.features) === JSON.stringify(S.base.features);
+    if (published) { lsDel(LS.feats); S.rev = 0; }
     if (dropped.length) setTimeout(() => editMsg(`Skipped ${dropped.length} damaged feature${dropped.length === 1 ? '' : 's'} (${dropped.slice(0, 3).join(', ')}${dropped.length > 3 ? '…' : ''}) — the rest of the map is fine.`), 700);
-    if (saved && saved.baseSig && saved.baseSig !== S.baseSig) {
+    if (saved && !published && saved.baseSig && saved.baseSig !== S.baseSig) {
       setTimeout(() => editMsg('The published map changed since your saved edits. Your edits are kept — export them or discard to load the new version.'), 600);
     }
     readHash();
@@ -80,7 +98,7 @@
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
     // handle for automated tests and power users (console): window.SRZ.state, .exportModel('kml') …
-    window.SRZ = { state: S, map, setView, setEdit, setMode, startReview, reviewAct, undo, redo, mutate, exportModel, parseKML, parseGPX,
+    window.SRZ = { state: S, map, layers: L_, setView, setEdit, setMode, startReview, reviewAct, undo, redo, mutate, exportModel, parseKML, parseGPX, sweep, setZonesHidden,
       importText: (name, text) => importFile(new File([text], name)), modelText: fmt => { const m = exportModel(false);
         return fmt === 'kml' ? ZoneExport.toKML(m) : fmt === 'gpx' ? ZoneExport.toGPX(m) : ZoneExport.toGeoJSON(m); } };
   }
@@ -118,6 +136,8 @@
   }
   // does this feature change the rule geometry? (auto-detected candidates count once confirmed)
   const pending = f => f.properties.status === 'unreviewed' || f.properties.status === 'imported';
+  // a type the public map doesn't draw (private docks): it still counts in the rules
+  const offMap = f => (S.tags[f.properties.tag] || S.tags.other).showOnMap === false;
   const countsForRules = f => (isStructure(f) || isZoneTag(f.properties.tag)) && !pending(f);
   // everything about a feature the distance rules read — a rename or a note leaves it unchanged
   const ruleSig = f => countsForRules(f) ? JSON.stringify([f.properties.tag, f.geometry, isStructure(f), !!f.properties.hidden, f.properties.when || '']) : '';
@@ -131,13 +151,27 @@
     S.engRev = (S.engRev || 0) + 1;     // the current-rules baseline depends on these inputs
   }
 
+  // a dock edit only marks the engine stale; the rebuild (tens of ms) waits for the next compute
+  function flushEngine() { if (S.engDirty) { S.engDirty = false; syncEngine(); } }
+
   // ================================================================ compute
-  let recTimer = null, recSeq = 0;
+  let recTimer = null, recSeq = 0, waitSince = 0;
   function schedule(delay) {
     if (!S.booted) return;                 // boot runs the first compute itself, once everything is loaded
     clearTimeout(recTimer);
     $('#busy').classList.add('on');
-    recTimer = setTimeout(() => recompute(), delay == null ? 90 : delay);
+    recTimer = setTimeout(whenIdle, delay == null ? 90 : delay);
+  }
+  // the zone math holds the page for a moment: never start it mid-drag, mid-zoom or between quick clicks
+  function whenIdle() {
+    const t = performance.now();
+    if (!waitSince) waitSince = t;
+    // mapping docks from the photo (zones hidden): wait for a real pause, the numbers can lag a little
+    const mapping = S.edit.on && S.zonesHidden, quiet = mapping ? 1200 : 400, most = mapping ? 20000 : 4000;
+    const busy = (S.moving && t - waitSince < 15000) || (S.held && t - S.held < 30000) || (t - S.touched < quiet && t - waitSince < most);
+    if (busy) { recTimer = setTimeout(whenIdle, 150); return; }
+    waitSince = 0;
+    recompute();
   }
   function recompute() {
     if (!S.booted) return;
@@ -146,6 +180,7 @@
     // let the "updating" pill paint before the synchronous work
     requestAnimationFrame(() => setTimeout(() => {
       if (seq !== recSeq) return;
+      flushEngine();
       // the baseline (current rules) runs FIRST: the engine's working fields belong to
       // the last compute, and corridors / shallow water below must read the what-if ones
       const bk = JSON.stringify([S.view === 'surf', S.levelOffsetFt, !!S.highWater, S.engRev]);
@@ -163,36 +198,46 @@
   }
 
   // ================================================================== map
+  // base imagery: USGS is public domain but stops at zoom 16 (docks blur into blocks past that);
+  // Esri's World Imagery is sharp to zoom 19, and its Clarity set is often a different flight date
+  const SHARP = 'Sharp aerial (Esri)', SHARP2 = 'Sharp aerial 2 (Esri Clarity)', USGS_AERIAL = 'Aerial (USGS)';
+  const isSharp = n => n === SHARP || n === SHARP2;
   function buildMap() {
     const b = S.reach.bounds_lonlat;
-    map = L.map('lmap', { zoomControl: true, maxZoom: 20, minZoom: 11, zoomSnap: 0.25, wheelPxPerZoomLevel: 90, worldCopyJump: false });
-    const bounds = L.latLngBounds([b[1], b[0]], [b[3], b[2]]);
-    map.setMaxBounds(bounds.pad(0.6));
+    map = L.map('lmap', { zoomControl: true, maxZoom: 20, minZoom: 11, zoomSnap: 0.25, worldCopyJump: false });
+    // a wide fence (~100 km): enough to stop a lost user drifting off to Montana, never close enough to tug back a drag
+    map.setMaxBounds(L.latLngBounds([b[1] - 0.45, b[0] - 0.7], [b[3] + 0.45, b[2] + 0.7]));
     const usgs = n => `https://basemap.nationalmap.gov/arcgis/rest/services/${n}/MapServer/tile/{z}/{y}/{x}`;
+    // tiles keep loading during a drag (not only after it), and a few screens around stay ready
+    const tl = (url, o) => L.tileLayer(url, Object.assign({ crossOrigin: true, maxZoom: 20, updateWhenIdle: false, keepBuffer: 3 }, o));
+    const esriAttr = 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community';
     const base = {
-      'Aerial + labels (USGS)': L.tileLayer(usgs('USGSImageryTopo'), { crossOrigin: true, maxNativeZoom: 16, maxZoom: 20, attribution: 'USGS The National Map' }),
-      'Aerial (USGS)': L.tileLayer(usgs('USGSImageryOnly'), { crossOrigin: true, maxNativeZoom: 16, maxZoom: 20, attribution: 'USGS The National Map: Orthoimagery' }),
-      'Aerial, sharper (Esri)': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { crossOrigin: true, maxNativeZoom: 19, maxZoom: 20, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' }),
-      'Topo (USGS)': L.tileLayer(usgs('USGSTopo'), { crossOrigin: true, maxNativeZoom: 16, maxZoom: 20, attribution: 'USGS The National Map' }),
+      [USGS_AERIAL]: tl(usgs('USGSImageryOnly'), { maxNativeZoom: 16, attribution: 'USGS The National Map: Orthoimagery' }),
+      'Aerial + labels (USGS)': tl(usgs('USGSImageryTopo'), { maxNativeZoom: 16, attribution: 'USGS The National Map' }),
+      [SHARP]: tl('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, attribution: esriAttr }),
+      [SHARP2]: tl('https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, attribution: esriAttr }),
+      'Topo (USGS)': tl(usgs('USGSTopo'), { maxNativeZoom: 16, attribution: 'USGS The National Map' }),
     };
     const ui = lsGet(LS.ui) || {};
-    const baseName = base[ui.base] ? ui.base : 'Aerial (USGS)';
+    if (ui.base === 'Aerial, sharper (Esri)') ui.base = SHARP;           // the earlier name of the same layer
+    const baseName = base[ui.base] ? ui.base : USGS_AERIAL;
     base[baseName].addTo(map);
     L_.base = base; L_.baseName = baseName;
+    // the imagery picked while editing is remembered apart from the one for viewing
+    map.on('overlayadd overlayremove', e => { if (e.layer === L_.docksGroup && S.res) renderLegend(); });
     map.on('baselayerchange', e => {
       L_.baseName = e.name;
-      const u = lsGet(LS.ui) || {}; u.base = e.name; lsSet(LS.ui, u);
+      const u = lsGet(LS.ui) || {}; u[S.edit.on ? 'editBase' : 'base'] = e.name; lsSet(LS.ui, u);
+      updateEditBar();
     });
 
     const pane = (n, z, pe) => { map.createPane(n); map.getPane(n).style.zIndex = z; if (!pe) map.getPane(n).style.pointerEvents = 'none'; };
-    pane('depth', 340); pane('bands', 350); pane('width', 352); pane('single', 354); pane('shore', 360);
-    pane('runs', 380); pane('nwz', 390, true); pane('feat', 410, true); pane('labels', 640);
-    R.bands = L.canvas({ pane: 'bands', padding: 0.4 });
-    R.depth = L.canvas({ pane: 'depth', padding: 0.4 });
-    R.width = L.canvas({ pane: 'width', padding: 0.4 });
-    R.single = L.canvas({ pane: 'single', padding: 0.4 });
-    R.shore = L.canvas({ pane: 'shore', padding: 0.4 });
-    R.runs = L.canvas({ pane: 'runs', padding: 0.4 });
+    pane('zones', 350); pane('nwz', 390, true); pane('feat', 410, true); pane('labels', 640);
+    // every computed fill and line shares ONE canvas, drawn in the order the layers are created
+    // (depth, then bands, room-to-pass, one-rule, shoreline, lanes): one map-sized layer for the
+    // browser to move and redraw instead of six
+    const zc = L.canvas({ pane: 'zones', padding: 0.4 });
+    R.bands = R.depth = R.width = R.single = R.shore = R.runs = zc;
     R.nwz = L.svg({ pane: 'nwz', padding: 0.4 });
     R.feat = L.svg({ pane: 'feat', padding: 0.4 });
 
@@ -207,16 +252,16 @@
     L_.single = poly(R.single, { fillColor: '#2bb673', fillOpacity: 0.55, stroke: true, color: '#0d6b3c', weight: 1.4 });
     L_.singleOut = poly(R.single, { fillColor: '#d7263d', fillOpacity: 0.32 });
     L_.depth = [];
-    L_.runs = poly(R.runs, { stroke: true, color: S.cfg.classes.runs.color, weight: 2.6, dashArray: '7 5', fillColor: S.cfg.classes.runs.color, fillOpacity: 0.16 });
-    L_.shallow = L.polygon([], { renderer: R.nwz, interactive: false, pmIgnore: true, stroke: false, fillColor: 'url(#cauHatch)', fillOpacity: 1, fillRule: 'evenodd' }).addTo(map);
-    L_.depth20 = L.polygon([], { renderer: R.runs, interactive: false, pmIgnore: true, fill: false, color: '#9fe7ff', weight: 2, dashArray: '2 6', lineCap: 'round', opacity: 0.95 }).addTo(map);
-    L_.longest = L.polyline([], { renderer: R.runs, color: '#ffffff', weight: 3.5, opacity: 0.95, dashArray: '2 7', lineCap: 'round', interactive: false, pmIgnore: true }).addTo(map);
-    L_.longestShadow = L.polyline([], { renderer: R.runs, color: '#0a1a26', weight: 6, opacity: 0.5, interactive: false, pmIgnore: true }).addTo(map);
-    L_.longestShadow.bringToBack();
 
     // the analysed shoreline, crisp on top of the fills
     const ring2ll = r => r.map(([x, y]) => { const [lo, la] = S.eng.toLonLat(x, y); return [la, lo]; });
     L_.shore = L.polygon(S.reach.water.polygons.flatMap(p => p.map(ring2ll)), { renderer: R.shore, interactive: false, pmIgnore: true, fill: false, color: '#ffffff', weight: 1.1, opacity: 0.85 }).addTo(map);
+    // lanes and lines over the shoreline
+    L_.runs = poly(R.runs, { stroke: true, color: S.cfg.classes.runs.color, weight: 2.6, dashArray: '7 5', fillColor: S.cfg.classes.runs.color, fillOpacity: 0.16 });
+    L_.shallow = L.polygon([], { renderer: R.nwz, interactive: false, pmIgnore: true, stroke: false, fillColor: 'url(#cauHatch)', fillOpacity: 1, fillRule: 'evenodd' }).addTo(map);
+    L_.depth20 = L.polygon([], { renderer: R.runs, interactive: false, pmIgnore: true, fill: false, color: '#9fe7ff', weight: 2, dashArray: '2 6', lineCap: 'round', opacity: 0.95 }).addTo(map);
+    L_.longestShadow = L.polyline([], { renderer: R.runs, color: '#0a1a26', weight: 6, opacity: 0.5, interactive: false, pmIgnore: true }).addTo(map);
+    L_.longest = L.polyline([], { renderer: R.runs, color: '#ffffff', weight: 3.5, opacity: 0.95, dashArray: '2 7', lineCap: 'round', interactive: false, pmIgnore: true }).addTo(map);
 
     // hatch patterns (url(#nwzHatch) etc.) are declared once in index.html, outside Leaflet
     // lake approach: display-only, all of it a designated no-wake zone
@@ -228,13 +273,15 @@
     }
 
     const overlays = {};
-    L_.docksGroup = L.layerGroup().addTo(map);
+    // private docks (tags with showOnMap: false) count in every setback but would bury the public map in
+    // hundreds of pins: they show while editing, or when someone ticks them in this menu
+    L_.docksGroup = L.layerGroup();
     L_.poiGroup = L.layerGroup().addTo(map);
     L_.featGroup = L.layerGroup().addTo(map);
-    overlays['Docks & structures'] = L_.docksGroup;
+    overlays['Private docks'] = L_.docksGroup;
     overlays['Launches, services & hazards'] = L_.poiGroup;
     overlays['Lines & areas (booms, zones, caution)'] = L_.featGroup;
-    overlays['Straight lanes'] = L.layerGroup([L_.runs, L_.longest, L_.longestShadow]).addTo(map);
+    overlays['Straight lanes'] = L.layerGroup([L_.runs, L_.longestShadow, L_.longest]).addTo(map);   // re-added in this order
     L_.corr = L.layerGroup().addTo(map);
     overlays['Run stretches & U-turn spots'] = L_.corr;
     L_.ticks = L.layerGroup().addTo(map);
@@ -253,7 +300,8 @@
         const d = L.DomUtil.create('div', 'leaflet-bar');
         d.innerHTML = '<button class="mapbtn" id="gpsBtn" title="Show my location and the setbacks here" aria-label="My location">⌖</button>' +
           '<button class="mapbtn" id="fitBtn" title="Whole river" aria-label="Zoom to the whole river">⤢</button>' +
-          '<button class="mapbtn" id="editBtn" title="Edit map features" aria-label="Edit map">✎</button>';
+          '<button class="mapbtn" id="zonesBtn" title="Hide the zone colours to see the aerial photo (H)" aria-label="Hide the zone colours" aria-pressed="false">◐</button>' +
+          '<button class="mapbtn" id="editBtn" title="Add and edit docks and other features" aria-label="Edit map">✎</button>';
         L.DomEvent.disableClickPropagation(d);
         return d;
       },
@@ -267,6 +315,13 @@
     map.on('moveend', () => updateHash());
     map.on('click', onMapClick);
     map.on('dragstart', () => { S.follow = false; });
+    // while the map is in the user's hands, heavy work waits (see whenIdle)
+    map.on('movestart zoomstart', () => { S.moving = true; });
+    map.on('moveend zoomend', () => { S.moving = false; S.touched = performance.now(); });
+    for (const ev of ['pointerdown', 'wheel', 'touchstart']) map.getContainer().addEventListener(ev, () => { S.touched = performance.now(); }, { passive: true });
+    // dragging a pin or a vertex moves no map: the whole time a pointer is held on the map counts as busy
+    map.getContainer().addEventListener('pointerdown', () => { S.held = performance.now(); }, { passive: true });
+    for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, () => { if (S.held) { S.held = 0; S.touched = performance.now(); } }, { passive: true });
 
     if (map.pm) {
       map.pm.setGlobalOptions({ snappable: false, allowSelfIntersection: true });
@@ -281,17 +336,19 @@
     // depth bands are static (they move only with the lake level)
     for (const l of L_.depth) map.removeLayer(l);
     L_.depth = [];
-    if (S.view !== 'depth') return;
+    if (S.view !== 'depth' || S.zonesHidden) return;
     const d = S.cfg.depth, bands = S.eng.depthBands(d.edges, S.params.levelAdjust ? S.levelOffsetFt : 0);
     bands.forEach((b, i) => {
       L_.depth.push(L.polygon(ringsLL(b.rings), { renderer: R.depth, interactive: false, pmIgnore: true, stroke: false, fillRule: 'evenodd',
         fillColor: d.colors[i], fillOpacity: i === 0 ? 0.8 : 0.72 }).addTo(map));
     });
+    // the shared canvas draws in creation order: put the depth fills under the shoreline and lines
+    for (let i = L_.depth.length - 1; i >= 0; i--) L_.depth[i].bringToBack();
   }
 
   function renderZones() {
-    const res = S.res, v = S.view;
-    const showBands = v === 'bottom' || v === 'surf';
+    const res = S.res, v = S.view, hide = S.zonesHidden;
+    const showBands = !hide && (v === 'bottom' || v === 'surf');
     for (const k of ['idle', 'cruise', 'tow', 'surf']) {
       const lay = L_.bands[k];
       lay.setLatLngs(showBands ? ringsLL(res.bands[k].rings) : []);
@@ -299,24 +356,41 @@
       if (v === 'surf') op = k === 'surf' ? 0.62 : k === 'tow' ? 0.42 : 0.3;
       lay.setStyle({ fillOpacity: op });
     }
-    for (const k of ['narrow', 'twoway', 'surfpass']) L_.width[k].setLatLngs(v === 'pass' && res.width ? ringsLL(res.width.classes[k].rings) : []);
-    if (v === 'rule' && res.single) {
+    for (const k of ['narrow', 'twoway', 'surfpass']) L_.width[k].setLatLngs(!hide && v === 'pass' && res.width ? ringsLL(res.width.classes[k].rings) : []);
+    if (!hide && v === 'rule' && res.single) {
       L_.single.setLatLngs(ringsLL(res.single.rings));
       // everything else in the water is "inside this rule's buffer"
       const all = [...res.bands.idle.rings, ...res.bands.cruise.rings, ...res.bands.tow.rings, ...res.bands.surf.rings];
       L_.singleOut.setLatLngs(ringsLL(res.single.rings.concat(waterRings())));
       void all;
     } else { L_.single.setLatLngs([]); L_.singleOut.setLatLngs([]); }
-    const lanes = v === 'bottom' || v === 'surf';
+    const lanes = !hide && (v === 'bottom' || v === 'surf');
     L_.runs.setLatLngs(lanes ? ringsLL(res.runs.rings) : []);
     const lg = res.runs.longest;
     const line = lanes && lg ? [ll(...lg.a), ll(...lg.b)] : [];
     L_.longest.setLatLngs(line); L_.longestShadow.setLatLngs(line);
     if (lanes && lg) L_.longest.bindTooltip(`Longest straight lane: ${fmtFt(lg.m / FT)} ft`, { sticky: true }); else L_.longest.unbindTooltip();
-    L_.shore.setStyle({ opacity: v === 'depth' ? 0.5 : 0.85 });
+    // with the zones hidden the shoreline stays, faint, so a dock can be seen against it
+    L_.shore.setStyle({ opacity: hide ? 0.45 : v === 'depth' ? 0.5 : 0.85 });
     const lvl = S.params.levelAdjust ? S.levelOffsetFt : 0, sh = S.cfg.depth.shallowFt || 5;
-    L_.shallow.setLatLngs(v === 'bottom' || v === 'surf' ? ringsLL(S.eng.shallowInUse(sh, engParams()).rings) : []);
-    L_.depth20.setLatLngs(v === 'surf' || v === 'depth' ? ringsLL(S.eng.depthLine(S.cfg.depth.surfLineFt || 10, lvl)) : []);
+    L_.shallow.setLatLngs(!hide && (v === 'bottom' || v === 'surf') ? ringsLL(S.eng.shallowInUse(sh, engParams()).rings) : []);
+    L_.depth20.setLatLngs(!hide && (v === 'surf' || v === 'depth') ? ringsLL(S.eng.depthLine(S.cfg.depth.surfLineFt || 10, lvl)) : []);
+  }
+  // the zone colours on or off — off to see the aerial photo (docks, booms, swim floats) underneath
+  function setZonesHidden(h) { S.zonesHidden = !!h; applyZonesHidden(); }
+  function applyZonesHidden() {
+    const zb = $('#zonesBtn');
+    if (zb) {
+      zb.classList.toggle('on', S.zonesHidden); zb.setAttribute('aria-pressed', String(S.zonesHidden));
+      zb.title = S.zonesHidden ? 'Show the zone colours again (H)' : 'Hide the zone colours to see the aerial photo (H)';
+      zb.setAttribute('aria-label', S.zonesHidden ? 'Show the zone colours' : 'Hide the zone colours');
+    }
+    if (L_.approach) { if (S.zonesHidden) L_.approach.remove(); else if (!map.hasLayer(L_.approach)) L_.approach.addTo(map).bringToBack(); }
+    renderStatic();
+    renderAllFeatures();          // areas draw as outlines while the zones are hidden
+    if (S.res) { renderZones(); renderRuns(); renderLegend(); }
+    updateEditBar();
+    if (!S.zonesHidden && S.engDirty) schedule(10);
   }
   function waterRings() { return S.reach.water.polygons.flatMap(p => p); }
 
@@ -348,8 +422,8 @@
       for (let rm = c.rm0; rm <= c.rm1 + 1e-9; rm += Math.max(0.02, (c.rm1 - c.rm0) / 12)) { const q = S.eng.pointAtMile(rm); if (q) pts.push(ll(q.x, q.y)); }
       if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.15), { maxZoom: 17 });
     });
-    // markers: a letter per stretch, a U-turn symbol per turnaround basin
-    for (const c of S.corr) {
+    // markers: a letter per stretch, a U-turn symbol per turnaround basin (not while the zones are hidden)
+    for (const c of S.zonesHidden ? [] : S.corr) {
       L.marker(ll(c.center[0], c.center[1]), { keyboard: false, pmIgnore: true, zIndexOffset: 800,
         icon: L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: `<div class="corr-label ${act}">${c.label}</div>` }) })
         .bindTooltip(`Stretch ${c.label}: RM ${c.rm0.toFixed(1)}–${c.rm1.toFixed(1)}, ${fmtFt(c.lengthFt)} ft of continuous ${act === 'surf' ? 'surf' : 'towing'} water`).addTo(L_.corr);
@@ -387,6 +461,8 @@
   }
   function featStyle(f) {
     const st = featStyle0(f);
+    // zones hidden: areas become outlines with a whisper of fill (still clickable inside), so the photo shows through
+    if (S.zonesHidden && /Polygon/.test(f.geometry.type)) return Object.assign(st, { fillColor: st.color, fillOpacity: 0.05, weight: Math.min(st.weight || 2, 2.2) });
     return S.edit.on && isZoneTag(f.properties.tag) ? Object.assign(st, { fillOpacity: 0.35 }) : st;
   }
   function featStyle0(f) {
@@ -429,13 +505,15 @@
     if (g.type !== 'Point' && !S.edit.on) lay.bindTooltip(esc(pr.name || tagOf(f).label), { sticky: true });
     return lay;
   }
+  // out of its group as well as off the map: a group re-added later (the private docks) must not bring back stale copies
+  function dropLayer(lay) { for (const g of [L_.docksGroup, L_.poiGroup, L_.featGroup]) g.removeLayer(lay); lay.remove(); }
   function groupFor(f) {
-    if (f.geometry && f.geometry.type !== 'Point') return L_.featGroup;
-    return ['dock', 'shared_dock', 'swim_platform'].includes(f.properties.tag) ? L_.docksGroup : L_.poiGroup;
+    if (offMap(f)) return L_.docksGroup;            // pins, traced lines and outlines alike
+    return f.geometry && f.geometry.type !== 'Point' ? L_.featGroup : L_.poiGroup;
   }
   function renderFeature(id) {
     const old = featLayers.get(id);
-    if (old) { if (old.pm && old.pm.enabled && old.pm.enabled()) old.pm.disable(); old.remove(); featLayers.delete(id); }
+    if (old) { if (old.pm && old.pm.enabled && old.pm.enabled()) old.pm.disable(); dropLayer(old); featLayers.delete(id); }
     const f = S.fc.features.find(q => q.properties.id === id);
     if (!f || f.properties.hidden || (pending(f) && !S.edit.on)) return;     // not on the public map until confirmed
     let lay = null;
@@ -444,10 +522,17 @@
     featLayers.set(id, lay);
   }
   function renderAllFeatures() {
-    for (const [, lay] of featLayers) lay.remove();
+    for (const [, lay] of featLayers) dropLayer(lay);
     featLayers.clear();
     for (const f of S.fc.features) renderFeature(f.properties.id);
     updateTagCounts();
+    // new layers: put back the selected feature's handles and the pulsing pin under review
+    if (S.edit.sel) highlightSel();
+    markReview();
+  }
+  function markReview() {
+    const id = S.review ? S.review.ids[S.review.i] : null;
+    for (const [k, lay] of featLayers) { const el = lay.getElement && lay.getElement(), d = el && el.querySelector && el.querySelector('.pin'); if (d) d.classList.toggle('hl', k === id); }
   }
   const rnd7 = v => Math.round(v * 1e7) / 1e7;
 
@@ -462,6 +547,7 @@
     const [x, y] = utm(latlng.lng, latlng.lat);
     const p = engParams();
     if (!S.res) return;
+    flushEngine();
     S.eng.widthField();
     const s = S.eng.sample(x, y, p);
     let html;
@@ -478,8 +564,9 @@
   function popOpts(o) {
     const sz = map.getSize(), small = sz.x < 600;
     const card = S.review && !$('#reviewcard').hidden ? $('#reviewcard').offsetHeight + 16 : 0;
+    const top = Math.max(small ? 110 : 64, editBarH() + 14);      // clear of the edit bar, which can wrap to two or three rows
     return Object.assign({ maxWidth: small ? Math.max(210, sz.x - 110) : 320,
-      autoPanPaddingTopLeft: L.point(12, small ? 110 : 64), autoPanPaddingBottomRight: L.point(small ? 60 : 24, 24 + card) }, o || {});
+      autoPanPaddingTopLeft: L.point(12, top), autoPanPaddingBottomRight: L.point(small ? 60 : 24, 24 + card) }, o || {});
   }
   // Leaflet makes tooltipped SVG paths focusable: keep dozens of off-screen shapes out of the tab order
   function noTabStop(lay) {
@@ -588,6 +675,11 @@
       (S.levelOffsetFt && p.levelAdjust && (R_.surf.minDepthFt || R_.tow.minDepthFt) ? ` Depths use today's lake level.` : '');
   }
   function renderLegend() {
+    if (S.zonesHidden) {            // nothing to explain but how to bring the colours back
+      $('#legend').innerHTML = `<div class="lstrip"><span class="lchip">Zone colours hidden${S.edit.on ? ' while you map' : ''}</span><button id="legTog" aria-label="Show the zone colours">show (H)</button></div>`;
+      $('#legTog').onclick = () => setZonesHidden(false);
+      return;
+    }
     const c = S.cfg.classes, v = S.view, p = S.params, R_ = p.rules;
     const row = (sw, t, sub) => `<div class="row">${sw}<div>${t}${sub ? `<small>${sub}</small>` : ''}</div></div>`;
     const sq = col => `<span class="sw" style="background:${col}"></span>`;
@@ -625,7 +717,8 @@
         row(sq('#d7263d'), `Inside that ${r.ft} ft buffer`) +
         `<small class="more" style="display:block;color:#5d7182;margin-top:.3rem">One rule at a time, ignoring the others and the designated zones.</small>`;
     }
-    html += row(dot(S.tags.dock.color), 'Dock', S.edit.on ? 'dashed ring = auto-detected, not counted until reviewed' : 'counts as a structure');
+    // private docks are drawn only while editing (or when ticked in the layers menu)
+    if (S.edit.on || map.hasLayer(L_.docksGroup)) html += row(dot(S.tags.dock.color), 'Private dock', S.edit.on ? 'dashed ring = auto-detected, not counted until reviewed' : 'counts as a structure');
     if (v === 'bottom' || v === 'surf') {     // the map's other symbols
       const pin = id => { const t = S.tags[id] || S.tags.other; return `<span class="sw lsym" style="background:${t.color}">${esc(t.glyph || '')}</span>`; };
       html += row('<span class="sw lsym sq">A</span>', 'Run stretch', 'lettered in Plan a run') +
@@ -643,6 +736,7 @@
       } else if (v === 'pass') { add(sq(c.narrow.color), 'Narrow'); add(sq(c.twoway.color), 'Two-way'); add(sq(c.surfpass.color), 'Surf-pass'); add(nwz, 'Zone'); }
       else if (v === 'depth') S.cfg.depth.labels.forEach((t, i) => add(sq(S.cfg.depth.colors[i]), t.replace(' ft', '').replace('under ', '<')));
       else if (v === 'rule') { add(sq('#2bb673'), 'Allowed'); add(sq('#d7263d'), 'Inside buffer'); }
+      if (S.edit.on || map.hasLayer(L_.docksGroup)) add(dot(S.tags.dock.color), 'Private dock');
       $('#legend').innerHTML = `<div class="lstrip">${chips.join('')}<button id="legTog" aria-label="Show the full legend" aria-expanded="false">more</button></div>`;
       $('#legTog').onclick = () => { $('#legend').classList.toggle('min'); renderLegend(); };
       return;
@@ -744,36 +838,155 @@
   }
 
   // ==================================================================== editor
+  const TAG_ORDER = ['dock', 'shared_dock', 'marina', 'public_dock', 'launch', 'fuel', 'log_boom', 'swim_area', 'swim_platform', 'buoy', 'hazard', 'caution',
+    'no_wake_zone', 'no_motor_zone', 'no_entry_zone', 'safety_boom', 'park', 'beach', 'restroom', 'services', 'bridge', 'dam', 'gauge', 'landmark', 'other'];
+  const DOCKISH = ['dock', 'shared_dock', 'public_dock', 'marina', 'fuel'];
   function buildPalette() {
-    const order = ['dock', 'shared_dock', 'marina', 'public_dock', 'launch', 'fuel', 'log_boom', 'swim_area', 'swim_platform', 'buoy', 'hazard', 'caution',
-      'no_wake_zone', 'no_motor_zone', 'no_entry_zone', 'safety_boom', 'park', 'beach', 'restroom', 'services', 'bridge', 'dam', 'gauge', 'landmark', 'other'];
-    $('#palette').innerHTML = order.filter(id => S.tags[id]).map(id => {
+    $('#palette').innerHTML = TAG_ORDER.filter(id => S.tags[id]).map(id => {
       const t = S.tags[id];
       return `<button class="ptag${id === S.edit.tag ? ' on' : ''}" data-tag="${id}" title="${esc(t.label)}${t.structure ? ' — counts as a structure for distance rules' : ''}">` +
         `<span class="g" style="background:${t.color}">${esc(t.glyph || '')}</span><span class="nm">${esc(t.label)}</span>${t.structure ? '<span class="st">rule</span>' : ''}</button>`;
     }).join('');
-    $$('#palette .ptag').forEach(b => b.onclick = () => {
-      S.edit.tag = b.dataset.tag;
-      $$('#palette .ptag').forEach(x => x.classList.toggle('on', x === b));
-      const geom = S.tags[S.edit.tag].geom;
-      if (S.edit.on && S.edit.mode === 'pin' && geom === 'line') startDraw('line');
-      else if (S.edit.on && S.edit.mode === 'pin' && geom === 'area') startDraw('area');
-      if (!S.edit.on) { setEdit(true); }
-      if (S.edit.mode === 'select') { setMode(geom === 'line' ? 'line' : geom === 'area' ? 'area' : 'pin'); }
-    });
+    $$('#palette .ptag').forEach(b => b.onclick = () => pickTag(b.dataset.tag));
+    // the map's edit bar offers the same types: pins on the water first, then lines and areas, then the rest
+    const pins = ['dock', 'shared_dock', 'public_dock', 'marina', 'fuel', 'swim_platform', 'buoy', 'hazard', 'launch'];
+    const drawn = ['log_boom', 'swim_area', 'caution', 'no_wake_zone', 'no_motor_zone', 'no_entry_zone', 'safety_boom'];
+    const group = (label, ids) => `<optgroup label="${label}">` + ids.filter(id => S.tags[id]).map(id => `<option value="${id}">${esc(S.tags[id].label)}</option>`).join('') + '</optgroup>';
+    const ebTag = $('#ebTag');           // (an older cached page has no edit bar: editing still works from the panel)
+    if (ebTag) ebTag.innerHTML = group('Pins on the water', pins) + group('Lines and areas', drawn) +
+      group('On shore and other', TAG_ORDER.filter(id => !pins.includes(id) && !drawn.includes(id)));
+  }
+  // the tool a type needs: lines and areas draw, points drop pins, docks ('any') keep the tool in hand
+  function modeFor(tag) {
+    const g = (S.tags[tag] || S.tags.other).geom;
+    if (g === 'line' || g === 'area') return g;
+    if (g === 'point') return 'pin';
+    return ['pin', 'line', 'area'].includes(S.edit.mode) ? S.edit.mode : 'pin';
+  }
+  function pickTag(tag) {
+    S.edit.tag = tag;
+    $$('#palette .ptag').forEach(x => x.classList.toggle('on', x.dataset.tag === tag));
+    if (!S.edit.on) setEdit(true); else setMode(modeFor(tag));
   }
   function setEdit(on) {
+    const was = S.edit.on;
     S.edit.on = on;
     $('#editMode').checked = on;
     const eb = $('#editBtn'); if (eb) eb.classList.toggle('on', on);
     if (!on) { setMode('select'); select(null); stopReview(); }
     map.getContainer().style.cursor = '';
+    $('.mapcol').classList.toggle('editing', on);
     // rebuild every layer: markers become draggable or not, tooltips come and go, and
-    // unreviewed candidates show only while editing
-    renderAllFeatures();
-    if (S.res) renderLegend();
-    if (on) { switchTab('tEdit'); map.closePopup(); }
+    // unreviewed candidates show only while editing (editView redraws them too)
+    if (on !== was) editView(on); else { renderAllFeatures(); if (S.res) renderLegend(); }
+    if (on) {
+      switchTab('tEdit'); map.closePopup();
+      if (!was && S.edit.mode === 'select') setMode(modeFor(S.edit.tag));   // ready to drop docks at once
+    }
     updateEditState();
+  }
+  // editing is mapping from the photo: sharp imagery, no zone colours — both put back afterwards
+  function editView(on) {
+    const u = lsGet(LS.ui) || {};
+    if (on) {
+      S.preEdit = { base: L_.baseName, hidden: S.zonesHidden, docks: map.hasLayer(L_.docksGroup) };
+      setBase(L_.base[u.editBase] ? u.editBase : SHARP);
+      S.zonesHidden = true;             // always: a quick look at the zones (H) shouldn't cover the next session's water
+      L_.docksGroup.addTo(map);         // the private docks are what's being mapped
+    } else {
+      const pe = S.preEdit || { base: USGS_AERIAL, hidden: false, docks: false };
+      setBase(pe.base);
+      S.zonesHidden = pe.hidden;
+      S.sweepRm = null;
+      if (!pe.docks) map.removeLayer(L_.docksGroup);
+    }
+    applyZonesHidden();
+  }
+  function setBase(name) {
+    if (!L_.base[name] || name === L_.baseName) return;
+    map.removeLayer(L_.base[L_.baseName]); L_.base[name].addTo(map);    // the layers control reports it (baselayerchange)
+  }
+  // the map's edit bar: what you're adding, the tool, zone colours, imagery, the shore sweep, undo
+  function updateEditBar() {
+    const bar = $('#editbar');
+    if (!bar || !S.fc) return;
+    bar.hidden = !S.edit.on;
+    if (!S.edit.on) return;
+    const t = S.tags[S.edit.tag] || S.tags.other, m = S.edit.mode;
+    $('#ebTag').value = S.edit.tag;
+    $('#ebDot').style.background = t.color;
+    $$('#editbar [data-mode]').forEach(b => {
+      const k = b.dataset.mode, on = k === m;
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+      b.disabled = (k === 'pin' && /line|area/.test(t.geom)) || (k === 'line' && !/line|any/.test(t.geom)) || (k === 'area' && !/area|any/.test(t.geom));
+    });
+    $('#ebZones').textContent = S.zonesHidden ? 'Show zones' : 'Hide zones';
+    $('#ebZones').setAttribute('aria-pressed', String(!S.zonesHidden));
+    const img = $('#ebImg');
+    if (!img.options.length) img.innerHTML = Object.keys(L_.base).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    img.value = L_.baseName;
+    const total = S.eng.centerlineLengthMi;
+    $('#ebRm').textContent = S.sweepRm != null && total ? `RM ${S.sweepRm.toFixed(1)} of ${total.toFixed(1)}` : 'Sweep the shore';
+    const nm = esc(t.label.toLowerCase());
+    // the second half of each hint (in .eb-more) drops on phones
+    $('#drawhint').innerHTML = m === 'pin' ? `Click the outer (water) end of each <b>${nm}</b> to add it<span class="eb-more"> · click a pin to change it, drag to move it` + (DOCKISH.includes(S.edit.tag) ? ' · trace a long dock with Line' : '') + '</span>'
+      : m === 'line' ? `Click along the <b>${nm}</b>; click the last point again to finish<span class="eb-more"> · Esc cancels</span>`
+      : m === 'area' ? `Click around the <b>${nm}</b>; click the first point to close it<span class="eb-more"> · Esc cancels</span>`
+      : 'Click a feature to change it<span class="eb-more"> · drag pins to move them · choose Pin to add more</span>';
+    const docks = S.fc.features.filter(f => DOCKISH.includes(f.properties.tag) && !f.properties.hidden).length;
+    // docks added since the page opened that are still there (undo takes them back off the count)
+    const live = new Set(S.fc.features.map(f => f.properties.id)), mine = [...S.edit.added].filter(id => live.has(id)).length;
+    $('#ebCount').textContent = `${docks} dock${docks === 1 ? '' : 's'} mapped` + (mine ? ` · ${mine} added this visit` : '');
+  }
+  // step along the river a screen at a time with both banks in view, so no stretch of shore is missed
+  const MI_M = 1609.344;
+  const editBarH = () => {               // how far the edit bar reaches down into the map (0 when not editing)
+    const bar = $('#editbar'); if (!bar || bar.hidden) return 0;
+    return Math.max(0, bar.getBoundingClientRect().bottom - map.getContainer().getBoundingClientRect().top);
+  };
+  // length of the line (ox,oy) + t(ux,uy) inside the box |x| <= a, |y| <= b
+  function chordLen(a, b, ux, uy, ox, oy) {
+    let t0 = -Infinity, t1 = Infinity;
+    for (const [o, u, lim] of [[ox, ux, a], [oy, uy, b]]) {
+      if (Math.abs(u) < 1e-9) { if (Math.abs(o) > lim) return 0; continue; }
+      const ta = (-lim - o) / u, tb = (lim - o) / u;
+      t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb));
+    }
+    return Math.max(0, t1 - t0);
+  }
+  // the stop at river mile rm: zoomed so the river's width fills the free part of the map (below the bar),
+  // and how many metres of river — centreline and both banks — that view shows along the river's heading
+  function sweepView(rm) {
+    const p = S.eng.pointAtMile(Math.max(0, Math.min(rm, S.eng.centerlineLengthMi - 1e-6))); if (!p) return null;
+    const s = S.eng.sample(p.x, p.y, {}), half = s.inWater ? s.shore_m : 150;
+    const sz = map.getSize(), bar = editBarH(), W = sz.x, H = Math.max(160, sz.y - bar);
+    const at = ll(p.x, p.y), mpp0 = 156543.034 * Math.cos(at[0] * Math.PI / 180);
+    const z = Math.max(16.5, Math.min(18, Math.floor(Math.log2(mpp0 / ((2 * half + 90) / Math.min(W, H))) * 4) / 4));
+    const mpp = mpp0 / Math.pow(2, z), w = 2 * half / mpp;
+    const th = p.deg * Math.PI / 180, ux = Math.cos(th), uy = -Math.sin(th);      // heading on screen (y down)
+    let chord = Infinity;
+    for (const v of [-w / 2, 0, w / 2]) chord = Math.min(chord, chordLen(W / 2, H / 2, ux, uy, -uy * v, ux * v));
+    return { at, z, bar, alongM: Math.max(40, chord * mpp) };
+  }
+  function sweep(dir) {
+    const total = S.eng.centerlineLengthMi; if (!total) return;
+    const clamp = r => Math.max(0, Math.min(total, r));
+    const c = map.getCenter(), [cx, cy] = utm(c.lng, c.lat), here = S.eng.riverMile(cx, cy);
+    const atStop = S.sweepRm != null && Math.abs(here - S.sweepRm) < 0.6 * (S.sweepStep || 0.05);
+    let rm;
+    if (!atStop && map.getZoom() < 15) rm = dir > 0 ? 0 : total;                      // zoomed out: start at an end
+    else {
+      // the next stop overlaps this one by at least a fifth of the shorter view
+      const from = atStop ? S.sweepRm : here, v0 = sweepView(from); if (!v0) return;
+      const v1 = sweepView(clamp(from + dir * 0.8 * v0.alongM / MI_M)) || v0;
+      S.sweepStep = 0.8 * Math.min(v0.alongM, v1.alongM) / MI_M;
+      rm = clamp(from + dir * S.sweepStep);
+    }
+    const v = sweepView(rm); if (!v) return;
+    S.sweepRm = rm;
+    // centre the stop in the part of the map below the edit bar
+    map.setView(map.unproject(map.project(v.at, v.z).subtract([0, v.bar / 2]), v.z), v.z, { animate: true });
+    updateEditBar();
   }
   function setMode(mode) {
     S.edit.mode = mode;
@@ -781,30 +994,20 @@
     $('#addLine').classList.toggle('on', mode === 'line');
     $('#addArea').classList.toggle('on', mode === 'area');
     map.getContainer().style.cursor = mode === 'pin' ? 'crosshair' : '';
-    const hint = $('#drawhint');
+    // while dropping pins a quick double click is two pins, not a zoom
+    if (mode === 'pin') map.doubleClickZoom.disable(); else map.doubleClickZoom.enable();
     if (map.pm) map.pm.disableDraw();
-    if (mode === 'pin') {
-      const st = S.tags[S.edit.tag];
-      hint.hidden = false;
-      hint.innerHTML = `Click the map to drop a <b>${esc(st.label.toLowerCase())}</b>` +
-        (st.structure ? ' at its outer (waterward) end — setbacks are measured from the nearest part of a structure; trace long docks with ＋ Line' : '') +
-        `. <button class="btn" id="hintDone">Done</button>`;
-    }
-    else if (mode === 'line' || mode === 'area') {
-      hint.hidden = false;
-      hint.innerHTML = `Click to draw the ${mode === 'line' ? 'line' : 'area'} for a <b>${esc(S.tags[S.edit.tag].label.toLowerCase())}</b>; click the ${mode === 'line' ? 'last point again' : 'first point'} to finish. <button class="btn" id="hintDone">Cancel</button>`;
-    } else hint.hidden = true;
-    const hd = $('#hintDone'); if (hd) hd.onclick = () => setMode('select');
     if ((mode === 'line' || mode === 'area') && map.pm) {
       const t = S.tags[S.edit.tag];
-      map.pm.enableDraw(mode === 'line' ? 'Line' : 'Polygon', { snappable: false, finishOn: null, continueDrawing: false,
+      // docks are traced one after another: Geoman re-arms itself after each (it disables drawing after pm:create)
+      map.pm.enableDraw(mode === 'line' ? 'Line' : 'Polygon', { snappable: false, finishOn: null, continueDrawing: DOCKISH.includes(S.edit.tag),
         templineStyle: { color: t.color === '#ffffff' ? '#ffde59' : t.color, weight: 3 }, hintlineStyle: { color: '#ffffff', dashArray: '4 6' },
         pathOptions: { color: t.color, weight: 3 } });
     } else if ((mode === 'line' || mode === 'area') && !map.pm) {
       editMsg('Drawing tools did not load — reload the page to draw lines and areas.'); S.edit.mode = 'select';
     }
+    updateEditBar();
   }
-  function startDraw(kind) { setMode(kind); }
   function onDrawCreate(e) {
     const gj = e.layer.toGeoJSON();
     map.removeLayer(e.layer);
@@ -816,9 +1019,11 @@
     const id = newId();
     pushHistory();
     S.fc.features.push({ type: 'Feature', id, properties: { id, tag, name: '', status: 'confirmed', source: 'manual', updated: today() }, geometry: geom });
+    if (DOCKISH.includes(tag)) S.edit.added.add(id);
     afterMutation([id], true);
-    setMode('select');
-    select(id);
+    // tracing docks one after another keeps the tool in hand (continueDrawing); a boom or zone is selected to name it
+    if (DOCKISH.includes(tag)) editMsg(`${t.label} traced — trace the next one, or Esc to stop`);
+    else { setMode('select'); select(id); }
   }
   function roundGeom(g) {
     const r = c => [rnd7(c[0]), rnd7(c[1])];
@@ -835,12 +1040,16 @@
   function addPin(latlng) {
     const tag = S.edit.tag, t = S.tags[tag];
     if (t.geom === 'line' || t.geom === 'area') { setMode(t.geom); return; }
+    // too far out to see a dock (or the pin: they hide below zoom 14): zoom in on the spot, the next click adds it
+    if (map.getZoom() < 16) { map.setView(latlng, 17.5); editMsg(`Zoomed in — now click the outer (water) end of the ${t.label.toLowerCase()}`); return; }
+    if (S.edit.sel) select(null);              // close the last pin's form: the new pin is the one in hand
     const id = newId();
     pushHistory();
     S.fc.features.push({ type: 'Feature', id, properties: { id, tag, name: '', status: 'confirmed', source: 'manual', updated: today() },
       geometry: { type: 'Point', coordinates: [rnd7(latlng.lng), rnd7(latlng.lat)] } });
+    if (DOCKISH.includes(tag)) S.edit.added.add(id);
     afterMutation([id], isStructureTag(tag));
-    editMsg(`${t.label} added — drag to adjust, click it to tag or name it.`);
+    editMsg(`${t.label} added — drag it to adjust, click it to name it, ⌘Z / Ctrl Z to undo`);
   }
   function isStructureTag(tag) { return !!(S.tags[tag] && S.tags[tag].structure) || isZoneTag(tag); }
   function featById(id) { return S.fc.features.find(f => f.properties.id === id); }
@@ -868,7 +1077,8 @@
     if (S.edit.sel) highlightSel();
     saveLocal();
     updateTagCounts(); updateEditState();
-    if (ruleChange) { syncEngine(); schedule(30); }
+    // the zones catch up once the clicking stops — at once if they're on screen, after a pause while mapping from the photo
+    if (ruleChange) { S.engDirty = true; schedule(S.edit.on && S.zonesHidden ? 700 : 30); }
     else if (launchChange) renderRuns();
   }
   function pushHistory() {
@@ -926,6 +1136,7 @@
     return { add, mod, del, n: add + mod + del };
   }
   function updateEditState() {
+    updateEditBar();                    // its counts follow every change: undo, redo, discard, import
     if (S.staleTab) { otherTabSaved(); return; }
     const d = diffCount(), box = $('#editState');
     const rev = S.fc.features.filter(needsReview).length;
@@ -944,11 +1155,18 @@
       .map(([k, v]) => `<span><b>${v}</b> ${esc((S.tags[k] || S.tags.other).label.toLowerCase())}</span>`).join('') +
       (unrev ? `<span><b>${unrev}</b> unreviewed</span>` : '');
   }
-  function editMsg(m) { const e = $('#editMsg'); e.textContent = m; clearTimeout(editMsg.t); editMsg.t = setTimeout(() => { if (e.textContent === m) e.textContent = ''; }, 5000); }
+  function editMsg(m) {
+    const e = $('#editMsg'), f = $('#ebMsg');
+    e.textContent = m; clearTimeout(editMsg.t);
+    if (f && S.edit.on) { f.textContent = m; f.hidden = false; }      // also on the map, where the eyes are while editing
+    editMsg.t = setTimeout(() => { if (e.textContent === m) e.textContent = ''; if (f) f.hidden = true; }, 5000);
+  }
 
   // ---- selection & the feature form -------------------------------------------
   function onFeatureClick(id, latlng) {
-    if (S.edit.on && S.edit.mode === 'pin') { addPin(latlng); return; }
+    // dropping pins: a click inside a zone or caution area is a spot on the water; a click on a pin, dock or line picks it
+    const f = featById(id);
+    if (S.edit.on && S.edit.mode === 'pin' && f && /Polygon/.test(f.geometry.type) && !isStructure(f)) { addPin(latlng); return; }
     if (!S.edit.on) { featurePopup(id, latlng, false); return; }
     select(id);
     featurePopup(id, latlng, true);
@@ -1051,18 +1269,13 @@
   function endReviewView(rv) {
     if (rv.legendWasOpen) { $('#legend').classList.remove('min'); renderLegend(); }
   }
-  const ESRI = 'Aerial, sharper (Esri)';
-  function useSharpImagery() {     // the reviewer's explicit choice — the same as picking it in the layer control
-    if (L_.baseName === ESRI || !L_.base[ESRI]) return;
-    map.removeLayer(L_.base[L_.baseName]); L_.base[ESRI].addTo(map);
-  }
+  function useSharpImagery() { if (!isSharp(L_.baseName)) setBase(SHARP); }   // the reviewer's choice, as in the layer control
   function stopReview() {
     if (!S.review) return;
-    const id = S.review.ids[S.review.i];
     const rv = S.review;
     S.review = null; $('#reviewcard').hidden = true;
     endReviewView(rv);
-    const lay = featLayers.get(id); if (lay && lay.getElement && lay.getElement()) { const d = lay.getElement().querySelector('.pin'); if (d) d.classList.remove('hl'); }
+    markReview();                       // no review: no pulsing pin
   }
   function showReview() {
     const rv = S.review; if (!rv) return;
@@ -1071,12 +1284,10 @@
     const f = featById(rv.ids[rv.i]), pr = f.properties, t = tagOf(f);
     const lay0 = featLayers.get(pr.id);
     // no deeper than the imagery holds: USGS tiles stop at z16, Esri's at z19
-    const zMax = L_.baseName === ESRI ? 18 : 17;
+    const zMax = isSharp(L_.baseName) ? 18 : 17;
     if (f.geometry.type === 'Point' || !lay0 || !lay0.getBounds) map.setView(featCenter(f).slice().reverse(), Math.max(map.getZoom(), zMax), { animate: false });
     else map.fitBounds(lay0.getBounds(), { maxZoom: zMax, padding: [40, 40], animate: false });
-    for (const [, lay] of featLayers) { const el = lay.getElement && lay.getElement(); const d = el && el.querySelector && el.querySelector('.pin.hl'); if (d) d.classList.remove('hl'); }
-    const lay = featLayers.get(pr.id);
-    if (lay && lay.getElement()) { const d = lay.getElement().querySelector('.pin'); if (d) d.classList.add('hl'); }
+    markReview();
     const n = rv.ids.length;
     const kind = /Point/.test(f.geometry.type) ? 'point' : /LineString/.test(f.geometry.type) ? 'line' : 'area';
     const tagOpts = S.cfg.tags.filter(q => q.id === pr.tag || q.geom === 'any' || q.geom === kind).map(q => `<option value="${q.id}"${q.id === pr.tag ? ' selected' : ''}>${esc(q.label)}</option>`).join('');
@@ -1088,7 +1299,7 @@
       `<div class="k" style="font-size:.74rem;color:var(--ink-2)">${f.geometry.type === 'Point' ? 'Pulsing pin. Drag it into place if it\'s off. ' : ''}${why}</div>` +
       `<div class="btnrow"><button class="btn primary" data-r="yes">✓ Yes (Y)</button><button class="btn danger" data-r="no">✗ Remove (N)</button>` +
       `<select data-r="tag" aria-label="Change type">${tagOpts}</select><button class="btn" data-r="prev">← Back</button><button class="btn" data-r="skip">Skip →</button><button class="btn" data-r="stop">Stop</button>` +
-      (L_.baseName !== ESRI ? '<button class="btn" data-r="sharp" title="Esri World Imagery — sharper than the public-domain USGS default">Sharper imagery</button>' : '') + '</div>';
+      (!isSharp(L_.baseName) ? '<button class="btn" data-r="sharp" title="Esri World Imagery — sharper than the public-domain USGS default">Sharper imagery</button>' : '') + '</div>';
     const card = $('#reviewcard');
     card.querySelector('[data-r="yes"]').onclick = () => reviewAct('yes');
     card.querySelector('[data-r="no"]').onclick = () => reviewAct('no');
@@ -1387,6 +1598,7 @@
   function exportModel(official) {
     // official files: current rules, published features, summer full pool — the same as bake.mjs
     const p = official ? S.defaults : S.params, fc = official ? S.base : S.fc;
+    flushEngine();
     const act = official ? 'tow' : S.view === 'surf' ? 'surf' : 'tow';
     const lvl = official ? 0 : (p.levelAdjust ? S.levelOffsetFt : 0);
     const withWidth = !!($('#dlWidth') && $('#dlWidth').checked);
@@ -1429,10 +1641,10 @@
     try { const r = await fetch('downloads/manifest.json', { cache: 'no-cache' }); if (r.ok) man = await r.json(); } catch (_) { /* not built yet */ }
     const items = [
       ['PDF', 'pdf', 'Printable chart book: overview, three close-up sections, and the rules.'],
-      ['KMZ', 'kmz', 'Google Earth (phone or desktop), Avenza, onX Hunt/Offroad — every layer, zones in color.'],
+      ['KMZ', 'kmz', 'Google Earth (phone or desktop), Avenza, onX Hunt/Offroad — every layer, zones in color. Private docks are counted in the zones, not drawn as pins.'],
       ['GPX', 'gpx', 'Chartplotters and nav apps: zone edges as tracks, launches & hazards as waypoints.'],
-      ['KML', 'kml', 'Flattened for Google My Maps: zones, rule lines, launches and hazards — no folders or dock pins (those are in the KMZ and GeoJSON).'],
-      ['GeoJSON', 'geojson', 'GIS (QGIS, ArcGIS): zones, rule lines, every dock and feature.'],
+      ['KML', 'kml', 'Flattened for Google My Maps: zones, rule lines, launches and hazards — no folders.'],
+      ['GeoJSON', 'geojson', 'GIS (QGIS, ArcGIS): zones, rule lines and every feature, including each private dock.'],
     ];
     $('#officialDl').innerHTML = items.map(([fmt, ext, desc]) => {
       const f = man && man.files && man.files.find(q => q.ext === ext);
@@ -1473,6 +1685,7 @@
     if (!S.gps) return;
     // on the water the banner always uses the CURRENT rules — what-if settings are for exploring
     const p = engParams(S.defaults, 'bottom'), R_ = p.rules;
+    flushEngine();
     const [x, y] = utm(S.gps.lon, S.gps.lat);
     const s = S.eng.sample(x, y, p);
     const rm = S.eng.riverMile(x, y), rmTxt = rm != null && s.inWater ? ` · RM ${rm.toFixed(2)}` : '';
@@ -1721,9 +1934,10 @@
       `<p><b>Shoreline.</b> ${esc(rc.water.lineage)} (${fmtAc(rc.water.area_ac)} ac).` +
       (S.cfg.compare ? ` Shore-only, the engine reproduces the ${esc(S.cfg.compare.label)} buffers to within 1% (${S.cfg.compare.towFt} ft: ${S.cfg.compare.engineAc} vs ${S.cfg.compare.towAc} ac).` : '') +
       (rc.approach ? ` The approach beyond the analysed water is ${esc(rc.approach.lineage)} and shown as no-wake.` : '') + ` Setbacks are measured from this summer full-pool shoreline; the law measures from the waterline at the time, so at low water the true lines sit further out.</p>` +
-      `<p><b>Docks.</b> ${osm} piers mapped in OpenStreetMap${byHand ? ` and ${byHand} docks added or confirmed by hand` : ''} count as structures for the 100/150/200-ft rules, and the USGS shoreline already notches around many larger docks, so their edges count as shore. ` +
-      `A trial computer-vision pass over aerial imagery mostly picked up wake glints and tree shadows, so auto-detected docks stay out of the numbers until someone confirms them in Edit map${cand ? ` (${cand} waiting)` : ''}. ` +
-      `Unmapped docks are the biggest gap in this draft: a dock, boom or swim float that isn't on the map still counts on the water.</p>` +
+      `<p><b>Docks.</b> ${byHand ? `${byHand.toLocaleString('en-US')} docks mapped by hand from aerial imagery and ` : ''}${osm} piers from OpenStreetMap count as structures for the 100/150/200-ft rules, and the USGS shoreline already notches around many larger docks, so their edges count as shore. ` +
+      `Private docks aren't drawn on the map — hundreds of pins would bury it — but every one shapes the zones; tick <i>Private docks</i> in the layers menu to see them. ` +
+      (cand ? `${cand} auto-detected dock${cand === 1 ? '' : 's'} wait for review and don't count until confirmed. ` : '') +
+      `A dock, boom or swim float missing from our data still counts on the water.</p>` +
       `<p><b>Depth.</b> ${esc(rc.depth.lineage)}. ${esc(S.cfg.depth.note)}</p>` +
       `<p><b>Accuracy.</b> ${esc(S.cfg.disclaimer)}</p>` +
       `<p><b>Credits.</b> ${esc(S.cfg.credits)} ${esc(S.cfg.madeBy || '')}.</p>`;
@@ -1767,10 +1981,34 @@
     $('#editBtn').onclick = () => setEdit(!S.edit.on);
     $('#gpsBtn').onclick = toggleGps;
     $('#fitBtn').onclick = () => map.fitBounds(L_.shore.getBounds(), { padding: [20, 20] });
-    $('#addPin').onclick = () => { if (!S.edit.on) setEdit(true); const g = S.tags[S.edit.tag].geom; if (g === 'line' || g === 'area') S.edit.tag = 'dock'; buildPalette(); setMode(S.edit.mode === 'pin' ? 'select' : 'pin'); };
-    $('#addLine').onclick = () => { if (!S.edit.on) setEdit(true); if (!['line', 'any'].includes(S.tags[S.edit.tag].geom)) { S.edit.tag = 'log_boom'; buildPalette(); } setMode(S.edit.mode === 'line' ? 'select' : 'line'); };
-    $('#addArea').onclick = () => { if (!S.edit.on) setEdit(true); if (!['area', 'any'].includes(S.tags[S.edit.tag].geom)) { S.edit.tag = 'no_wake_zone'; buildPalette(); } setMode(S.edit.mode === 'area' ? 'select' : 'area'); };
+    // ＋ Pin / Line / Area toggle that tool, switching to a type that suits it if needed
+    const tool = (mode, fallback, fits) => () => {
+      const was = S.edit.on;
+      if (!fits.includes(S.tags[S.edit.tag].geom)) { S.edit.tag = fallback; $$('#palette .ptag').forEach(x => x.classList.toggle('on', x.dataset.tag === fallback)); }
+      if (!was) setEdit(true);
+      setMode(was && S.edit.mode === mode ? 'select' : mode);
+    };
+    $('#addPin').onclick = tool('pin', 'dock', ['point', 'any']);
+    $('#addLine').onclick = tool('line', 'log_boom', ['line', 'any']);
+    $('#addArea').onclick = tool('area', 'no_wake_zone', ['area', 'any']);
     $('#undo').onclick = undo; $('#redo').onclick = redo;
+    // the edit bar on the map
+    if ($('#editbar')) {
+      // the high-water banner sits just under the bar, however many rows it wraps to
+      const ebh = () => { const b = $('#editbar'); $('.mapcol').style.setProperty('--ebh', (b.offsetTop + b.offsetHeight) + 'px'); };
+      if (window.ResizeObserver) new ResizeObserver(ebh).observe($('#editbar'));
+      // a menu pick hands the keyboard back to the map, so H, [ ] and P work straight away
+      $('#ebTag').onchange = e => { pickTag(e.target.value); e.target.blur(); };
+      $$('#editbar [data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+      $('#ebZones').onclick = () => setZonesHidden(!S.zonesHidden);
+      $('#ebImg').onchange = e => { setBase(e.target.value); e.target.blur(); };
+      $('#ebPrev').onclick = () => sweep(-1); $('#ebNext').onclick = () => sweep(1);
+      $('#ebPrev').title = `Back along the shore toward ${place().riverMileOrigin || 'the start'} ([)`;
+      $('#ebNext').title = `Next stretch of shore toward ${place().riverMileEnd || 'the end'} (])`;
+      $('#ebUndo').onclick = undo;
+      $('#ebDone').onclick = () => setEdit(false);
+    }
+    $('#zonesBtn').onclick = () => setZonesHidden(!S.zonesHidden);
     $('#startReview').onclick = startReview;
     $('#exportEdits').onclick = exportEdits;
     if (window.showSaveFilePicker) { $('#saveFile').hidden = false; $('#saveFile').onclick = saveToFile; }
@@ -1788,9 +2026,14 @@
         if (k === 'y') reviewAct('yes'); else if (k === 'n') reviewAct('no'); else if (k === 'arrowright') reviewAct('skip');
         else if (k === 'arrowleft') reviewAct('prev'); else if (k === 'escape') stopReview();
         else if (k === 't') { const s = $('#reviewcard select'); if (s) s.focus(); }
+        else if (k === 'h' && !e.metaKey && !e.ctrlKey) setZonesHidden(!S.zonesHidden);
         else return;
         e.preventDefault(); return;
       }
+      // the sweep keys: brackets need AltGr (Ctrl+Alt) or Option on many layouts, so allow those — not ⌘ or plain Ctrl
+      if ((e.key === '[' || e.key === ']') && S.edit.on && !e.metaKey && (!e.ctrlKey || e.altKey)) { e.preventDefault(); sweep(e.key === ']' ? 1 : -1); return; }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.toLowerCase() === 'h') { setZonesHidden(!S.zonesHidden); return; }    // the photo with or without the zone colours
       if (!S.edit.on) return;
       if (e.key === 'Escape') { setMode('select'); select(null); }
       else if (e.key.toLowerCase() === 'p') $('#addPin').click();

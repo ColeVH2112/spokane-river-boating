@@ -178,8 +178,10 @@
     for (const f of features.features) {
       const pr = f.properties, t = tags[pr.tag] || tags.other;
       if (ZONE_TAGS[pr.tag] || pr.hidden || PENDING[pr.status]) continue;   // pending features aren't part of the map yet
-      if ((pr.tag === 'dock' || pr.tag === 'shared_dock') && !(ctx.include && ctx.include.docks)) continue;
-      const base = { name: pr.name || t.label, named: !!pr.name, short: pr.short || '', tag: pr.tag, label: t.label, note: pr.note || '', color: t.color,
+      // private docks (showOnMap: false) shape the zones but aren't boater waypoints: in only when asked (GIS, the in-app option)
+      const offMap = t.showOnMap === false;
+      if (offMap && !(ctx.include && ctx.include.docks)) continue;
+      const base = { name: pr.name || t.label, named: !!pr.name, short: pr.short || '', tag: pr.tag, label: t.label, note: pr.note || '', color: t.color, offMap,
         status: pr.status || '', structure: pr.structure != null ? !!pr.structure : !!t.structure, sym: t.gpx, icon: t.kml, gpxShort: t.short || '' };
       const g = f.geometry;
       if (!g || !coordsOK(g)) continue;
@@ -275,7 +277,7 @@
     const featFolders = {}, hiddenFolders = new Set();
     const put = (f, xml) => {
       (featFolders[f.label] = featFolders[f.label] || []).push(xml);
-      if (f.tag === 'dock' || f.tag === 'shared_dock') hiddenFolders.add(f.label);   // hundreds of pins: off until asked for
+      if (f.offMap) hiddenFolders.add(f.label);   // hundreds of private docks: off until asked for
     };
     const STATUS = { unreviewed: 'Found automatically — not yet reviewed.', approximate: 'Position approximate.', osm: 'From OpenStreetMap.',
                      derived: 'Derived from the 2004 depth survey.', imported: 'Imported — not yet reviewed.' };

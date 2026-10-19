@@ -2,7 +2,7 @@
  * republished map shows up immediately) with a cache fallback on the water;
  * basemap tiles you have viewed are cache-first, capped. Tiles are requested
  * with CORS — opaque responses would each be billed ~7 MB of storage quota. */
-const SHELL = 'srz-shell-v4', TILES = 'srz-tiles-v2', MAX_TILES = 1500;
+const SHELL = 'srz-shell-v5', TILES = 'srz-tiles-v2', MAX_TILES = 2500;
 // a connection that is up but moves no data (weak LTE, captive portal) must not
 // strand the app: after this long, answer from the cache and let the network finish
 const NET_TIMEOUT_MS = 4000;
@@ -17,6 +17,14 @@ self.addEventListener('activate', e => {
     .then(() => self.clients.claim()));
 });
 const isTile = u => /\/tile\/\d+\/\d+\/\d+/.test(u.pathname);
+// trimming lists every cached tile: do it once after a burst of new tiles, not once per tile
+let trimTimer = null, trimDone = null, trimResolve = null;
+function trimSoon() {                     // every caller waits on the same trim
+  clearTimeout(trimTimer);
+  if (!trimDone) trimDone = new Promise(r => { trimResolve = r; });
+  trimTimer = setTimeout(() => { const r = trimResolve; trimDone = trimResolve = null; trim().then(r, r); }, 5000);
+  return trimDone;
+}
 async function trim() {
   const c = await caches.open(TILES), keys = await c.keys();
   for (let i = 0; i < keys.length - MAX_TILES; i++) await c.delete(keys[i]);
@@ -30,7 +38,7 @@ self.addEventListener('fetch', e => {
       const hit = await c.match(req);
       if (hit) return hit;
       const res = await fetch(req);
-      if (res.ok) { c.put(req, res.clone()); e.waitUntil(trim()); }
+      if (res.ok) { c.put(req, res.clone()); e.waitUntil(trimSoon()); }
       return res;
     }));
     return;
