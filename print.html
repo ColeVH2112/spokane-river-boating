@@ -57,6 +57,10 @@
 </head>
 <body>
 <div class="bar"><button id="printBtn">Print / Save as PDF</button><span id="barMsg">Loading maps…</span></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <pattern id="cauHatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-45)">
+    <rect width="7" height="7" fill="#ffffff" fill-opacity="0.25"></rect><rect width="2.4" height="7" fill="#111111" fill-opacity="0.8"></rect></pattern>
+</defs></svg>
 <div id="pages"></div>
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/qrcode/qrcode.js"></script>
@@ -79,29 +83,56 @@
     try { hand = JSON.parse(localStorage.getItem('srz:print:v1')); } catch (_) { hand = null; }
     if (hand && Date.now() - (hand.at || 0) > 6 * 3600e3) hand = null;     // stale hand-off
     const r = cfg.rules;
-    const pick = k => ({ ft: r[k].ft, shore: !!r[k].shore, structures: !!r[k].structures, minDepthFt: r[k].minDepthFt || 0 });
-    const defaults = { rules: { nowake: pick('nowake'), tow: pick('tow'), surf: pick('surf') }, passFt: r.pass.ft,
-      run: { ft: r.run.ft, laneFt: r.run.laneFt, stepDeg: r.run.stepDeg }, zonesOn: true, levelAdjust: true };
+    const defaults = ZoneExport.defaultParams(cfg);
     const params = !official && hand && hand.params ? hand.params : defaults;
     const fc = !official && hand && hand.fc ? hand.fc : base;
-    const law = JSON.stringify(params) === JSON.stringify(defaults);
+    const law = ZoneExport.sameRules(params, defaults);
     const lvl = !official && params.levelAdjust && hand && hand.levelOffsetFt ? hand.levelOffsetFt : 0;   // official: summer full pool
-    const surfView = !official && hand && hand.view === 'surf';
+    // the chart book shows the view that was on screen; the default set ("full") shows every zone
+    const view = !official && hand && ['bottom', 'surf', 'depth', 'pass', 'rule'].includes(hand.view) ? hand.view : official ? 'full' : 'bottom';
+    const show = Object.assign({ depthLine: true, pins: true, narrow: true }, !official && hand && hand.show || {});
+    const single = hand && ['nowake', 'tow', 'surf'].includes(hand.single) ? hand.single : 'nowake';
+    const modes = view === 'full' || view === 'bottom' || view === 'surf';
+    const narrowOn = show.narrow && (view === 'bottom' || view === 'surf'), lineOn = show.depthLine && (view === 'surf' || view === 'depth');
     const hw = !official && hand && hand.highWater ? hand.highWater : null;   // today's print during high water
     const eng = ZoneEngine.create(reach);
     const inp = ZoneExport.engineInputs(eng, fc, cfg);
     eng.setStructures(inp.structures); eng.setZones(inp.zones);
-    const res = eng.compute({ rules: params.rules, passFt: params.passFt, zonesOn: params.zonesOn, levelOffsetFt: lvl, allNoWake: !!hw,
-      run: { ft: params.run.ft, laneFt: params.run.laneFt, stepDeg: params.run.stepDeg, activity: surfView ? 'surf' : 'tow' } });
+    const cp = { rules: params.rules, passFt: params.passFt, zonesOn: params.zonesOn, levelOffsetFt: lvl, allNoWake: !!hw,
+      width: view === 'pass' || narrowOn, single: view === 'rule' ? single : null,
+      run: { ft: params.run.ft, laneFt: params.run.laneFt, stepDeg: params.run.stepDeg, activity: view === 'surf' ? 'surf' : 'tow' } };
+    const res = eng.compute(cp);
+    const shFt = cfg.depth.shallowFt || 5, shallow = modes ? eng.shallowInUse(shFt, cp) : null;      // the hatched water on the map
+    const lineFt = cfg.depth.surfLineFt || 20;
+    const depthBands = view === 'depth' ? eng.depthBands(cfg.depth.edges, lvl) : null;
+    const depthLine = lineOn ? eng.depthLine(lineFt, lvl) : null;
     const s = res.stats, R = params.rules, C = cfg.classes;
+    // config rules.tow.onMap false: no no-tow band (no wake / wake OK / wake-surf water), as on the map
+    const tm = !cfg.rules.tow || cfg.rules.tow.onMap !== false, WK = C.wake || Object.assign({}, C.tow, { label: 'Wake OK' });
+    const tests = ZoneExport.surfTests(params), viewName = ZoneExport.VIEW_NAMES[view];
+    const levelTxt = lvl ? `today's level, ${Math.abs(lvl).toFixed(1)} ft ${lvl > 0 ? 'below' : 'above'} summer pool` : 'summer full pool';
+    const ACT = { nowake: ['A wake is allowed', 'No wake — 5 mph'], tow: ['Towing allowed', 'No towing'], surf: ['Wake surfing allowed', 'No wake surfing'] }[single];
     const place = cfg.place || {};
     document.title = cfg.title + ' — chart book';
     const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: place.timeZone || 'America/Los_Angeles' });
     const lb = k => ZoneExport.label(cfg, k, params);
-    const critTxt = (hw ? `HIGH WATER (lake ${hw.elev.toFixed(1)} ft on ${hw.date}): the entire river is no-wake · ` : '') + `${law ? 'Current rules' : 'What-if rules'}: no wake within ${R.nowake.ft} ft · no towing within ${R.tow.ft} ft · surf guideline ${R.surf.ft} ft` +
-      `${R.tow.structures ? ' — measured from shore and every dock' : ' — from shore'} · lanes ${fmtFt(params.run.ft)} ft${params.zonesOn ? '' : ' · designated zones OFF'}`;
-    const legend = `<div class="legend">${['idle', 'cruise', 'tow', 'surf'].map(k => `<span><i class="sw" style="background:${C[k].color}"></i>${esc(lb(k))}</span>`).join('')}` +
-      `<span><i class="sw" style="border:2px dashed ${C.runs.color}"></i>Straight lane ≥ ${fmtFt(params.run.ft)} ft</span>` +
+    const critTxt = (hw ? `HIGH WATER (lake ${hw.elev.toFixed(1)} ft on ${hw.date}): the entire river is no-wake · ` : '') + (view === 'full' ? '' : `${viewName} view · `) +
+      `${law ? 'Current rules' : 'What-if rules'}: no wake within ${R.nowake.ft} ft · no towing within ${R.tow.ft} ft` +
+      `${R.tow.structures ? ' — measured from shore and every dock' : ' — from shore'} · wake-surf guide, not law: ${ZoneExport.surfTests(params, true)} · lanes ${fmtFt(params.run.ft)} × ${fmtFt(params.run.laneFt)} ft${params.zonesOn ? '' : ' · designated zones OFF'}` +
+      (view === 'pass' ? '' : ` · depths: ${levelTxt}`);
+    const sw = (style, t) => `<span><i class="sw" style="${style}"></i>${esc(t)}</span>`;
+    const viewLegend = modes && !tm ? sw(`background:${C.idle.color}`, lb('idle')) + sw(`background:${WK.color}`, WK.label) + (view === 'bottom' ? '' : sw(`background:${C.surf.color}`, lb('surf')))
+      : view === 'bottom' ? ['idle', 'cruise', 'tow'].map(k => sw(`background:${C[k].color}`, lb(k))).join('')
+      : modes ? sw(`background:${C.idle.color}`, lb('idle')) + sw(`background:${C.cruise.color}`, lb('cruise')) +
+          sw(`background:${C.tow.color}`, 'Towing only') + sw(`background:${C.surf.color}`, lb('surf'))
+      : view === 'depth' ? cfg.depth.labels.map((t, i) => sw(`background:${cfg.depth.colors[i]}`, t)).join('')
+      : view === 'pass' ? ['narrow', 'twoway', 'surfpass'].map(k => sw(`background:${C[k].color}`, lb(k))).join('')
+      : sw('background:#2bb673', ACT[0]) + sw('background:#d7263d', ACT[1]);
+    const legend = `<div class="legend">${viewLegend}` +
+      (modes ? `<span><i class="sw" style="border:2px dashed ${C.runs.color}"></i>${view === 'surf' ? 'Surf' : 'Tow'} lane ≥ ${fmtFt(params.run.ft)} × ${fmtFt(params.run.laneFt)} ft</span>` : '') +
+      (lineOn ? sw('background:repeating-linear-gradient(90deg,#4fb8dc 0 3px,#fff 3px 6px);height:4px', `${lineFt} ft depth line`) : '') +
+      (shallow && shallow.rings.length ? sw('background:repeating-linear-gradient(-45deg,#111 0 2px,#fff 2px 5px)', `Shallow: under ${shFt} ft`) : '') +
+      (narrowOn ? sw('background:repeating-linear-gradient(45deg,#0b2f4a 0 1.5px,#dfe7ec 1.5px 4px)', 'Too narrow to pass') : '') +
       `<span><i class="sw" style="background:#8a1630"></i>Designated no-wake</span><span><i class="sw" style="background:#c2185b"></i>No motors</span>` +
       `<span><i class="sw" style="background:#111"></i>No entry (dam)</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,#111 0 2px,#fff 2px 5px)"></i>No entry when posted</span>` +
       `<span><i class="sw" style="background:#ff1a1a;height:4px"></i>Safety boom</span></div>`;
@@ -142,11 +173,14 @@
       `<span class="crit ${hw ? 'hw' : law ? 'law' : ''}">${esc(critTxt)}</span></div><div class="right">${date}<br>${esc(cfg.status)}</div></div>` +
       `<div class="mapwrap"><div class="map" id="m0"></div><div class="north">N</div></div>` +
       `<div class="row"><div class="stats">` +
-      `<div class="stat" style="border-left-color:${C.tow.color}"><b>${fmtAc(s.tow_ok_ac)} ac</b><span>tow zone (${R.tow.ft} ft+)</span></div>` +
-      `<div class="stat" style="border-left-color:${C.surf.color}"><b>${fmtAc(s.surf_ok_ac)} ac</b><span>also meets ${R.surf.ft}-ft surf guide</span></div>` +
+      (tm ? `<div class="stat" style="border-left-color:${C.tow.color}"><b>${fmtAc(s.tow_ok_ac)} ac</b><span>tow zone (${R.tow.ft} ft+)</span></div>`
+        : `<div class="stat" style="border-left-color:${WK.color}"><b>${fmtAc(s.wake_ok_ac)} ac</b><span>wake allowed (${R.nowake.ft} ft+); towing needs ${R.tow.ft} ft</span></div>`) +
+      `<div class="stat" style="border-left-color:${C.surf.color}"><b>${fmtAc(s.surf_ok_ac)} ac</b><span>wake-surf water (${esc(ZoneExport.surfTests(params, true))})</span></div>` +
       `<div class="stat" style="border-left-color:${C.idle.color}"><b>${fmtAc(s.idle_ac)} ac</b><span>no wake (5 mph)</span></div>` +
-      `<div class="stat" style="border-left-color:${C.runs.color}"><b>${s.run_zones}</b><span>straight lane${s.run_zones === 1 ? '' : 's'} ≥ ${fmtFt(params.run.ft)} ft · longest ${fmtFt(s.longest_run_ft)} ft</span></div></div>` +
-      `<ol class="howto"><li>Colors show which setbacks each spot clears, measured from the shoreline${R.tow.structures ? ' and every dock' : ''}. They don't promise the water is safe or legal right now.</li>` +
+      `<div class="stat" style="border-left-color:${C.runs.color}"><b>${s.run_zones}</b><span>straight lane${s.run_zones === 1 ? '' : 's'} ≥ ${fmtFt(params.run.ft)} × ${fmtFt(params.run.laneFt)} ft${s.longest_run_ft ? ` · longest ${fmtFt(s.longest_run_ft)} ft` : ''}</span></div></div>` +
+      `<ol class="howto"><li>${view === 'depth' ? `Colors show the water depth (${esc(levelTxt)}), from 5-ft contours.` : view === 'pass' ? 'Colors show where the river is wide enough for boats to pass at speed, measured between shore and dock tips.'
+        : view === 'rule' ? `Green shows where ${{ nowake: 'a wake', tow: 'towing', surf: 'wake surfing' }[single]} is allowed${single === 'surf' ? ` (${esc(tests)})` : ''}, measured from the shoreline${R.tow.structures ? ' and every dock' : ''}.`
+        : `Colors show which setbacks each spot clears, measured from the shoreline${R.tow.structures ? ' and every dock' : ''}.`} They don't promise the water is safe or legal right now.</li>` +
       `<li>Rules about people and boats apply everywhere: no wake within 100 ft of anyone in the water; 15 mph or less within 50 ft of another boat; keep right in narrow channels and pass port to port. The colors allow for every mapped dock (docks aren't drawn), and a dock we haven't mapped still counts on the water.</li>` +
       `<li>Pages 2–4 zoom in on each stretch (river miles, RM, count upstream from ${esc(place.riverMileOrigin || 'the start')}); the rules follow.</li></ol>${qrHtml}</div>${legend}${foot}`);
     sections.forEach((sec, k) => page(`<div class="head"><div><h2>Section ${k + 1} of 3 · ${esc(sec.name)}</h2>` +
@@ -197,9 +231,20 @@
       m.fitBounds(L.latLngBounds([ll(x0, y0), ll(x1, y1)]), { padding: [16, 16] });
       const box = m.getBounds(), W = m.getSize().x;
       const rend = L.canvas({ padding: 0.2 });
-      for (const k of ['idle', 'cruise', 'tow', 'surf'])
-        L.polygon(ringsLL(res.bands[k].rings), { renderer: rend, stroke: false, fillColor: C[k].color, fillOpacity: Math.min(0.62, C[k].opacity + 0.12), fillRule: 'evenodd', interactive: false }).addTo(m);
-      L.polygon(ringsLL(res.runs.rings), { renderer: rend, color: C.runs.color, weight: 2.4, dashArray: '6 4', fillColor: C.runs.color, fillOpacity: 0.12, fillRule: 'evenodd', interactive: false }).addTo(m);
+      const fillOf = (rings, color, op) => L.polygon(ringsLL(rings), { renderer: rend, stroke: false, fillColor: color, fillOpacity: op, fillRule: 'evenodd', interactive: false }).addTo(m);
+      // Boating: one tow zone; Wake surfing and the default set: the tow zone split into towing-only and wake-surf water
+      if (modes) for (const [b, cl] of !tm ? (view === 'bottom' ? [['idle', C.idle], ['wakeok', WK]] : [['idle', C.idle], ['wakenosurf', WK], ['surf', C.surf]])
+        : view === 'bottom' ? [['idle', C.idle], ['cruise', C.cruise], ['towok', C.tow]] : [['idle', C.idle], ['cruise', C.cruise], ['tow', C.tow], ['surf', C.surf]])
+        fillOf(res.bands[b].rings, cl.color, Math.min(0.62, (cl.opacity || 0.5) + 0.12));
+      if (view === 'depth') depthBands.forEach((b, i) => fillOf(b.rings, cfg.depth.colors[i], 0.75));
+      if (view === 'pass' && res.width) for (const k of ['narrow', 'twoway', 'surfpass']) fillOf(res.width.classes[k].rings, C[k].color, 0.55);
+      if (view === 'rule' && res.single) {
+        fillOf(res.single.rings, '#2bb673', 0.55);
+        fillOf(res.single.rings.concat(reach.water.polygons.flatMap(p => p)), '#d7263d', 0.34);      // the rest of the water
+      }
+      if (shallow && shallow.rings.length) L.polygon(ringsLL(shallow.rings), { renderer: L.svg({ padding: 0.2 }), stroke: false, fillColor: 'url(#cauHatch)', fillOpacity: 1, fillRule: 'evenodd', interactive: false }).addTo(m);
+      if (narrowOn && res.width) L.polygon(ringsLL(res.width.classes.narrow.rings), { renderer: rend, color: '#0b2f4a', weight: 1, dashArray: '2 3', fillColor: '#0b2f4a', fillOpacity: 0.22, fillRule: 'evenodd', interactive: false }).addTo(m);
+      if (modes) L.polygon(ringsLL(res.runs.rings), { renderer: rend, color: C.runs.color, weight: 2.4, dashArray: '6 4', fillColor: C.runs.color, fillOpacity: 0.12, fillRule: 'evenodd', interactive: false }).addTo(m);
       const nw = [];
       const ZC = { no_wake_zone: ['#8a1630', 0.42], no_motor_zone: ['#c2185b', 0.5], no_entry_zone: ['#111111', 0.55] };
       for (const f of fc.features) if (ZC[f.properties.tag] && f.geometry && f.geometry.type !== 'Point') {
@@ -211,13 +256,16 @@
       if (reach.approach) for (const p of reach.approach.polygons) nw.push([p.map(rg => rg.map(([x, y]) => ll(x, y))), [...ZC.no_wake_zone, null]]);
       for (const [p, [c, o, dash]] of nw) L.polygon(p, { renderer: rend, color: c, weight: dash ? 2 : 1.5, dashArray: dash, fillColor: c, fillOpacity: o, interactive: false }).addTo(m);
       L.polygon(reach.water.polygons.flatMap(p => ringsLL(p)), { renderer: rend, fill: false, color: '#fff', weight: 0.9, opacity: 0.85, interactive: false }).addTo(m);
-      if (res.runs.longest) L.polyline([ll(...res.runs.longest.a), ll(...res.runs.longest.b)], { renderer: rend, color: '#fff', weight: 2.5, dashArray: '2 6', interactive: false }).addTo(m);
+      if (depthLine) L.polygon(ringsLL(depthLine), { renderer: rend, fill: false, color: '#4fb8dc', weight: 1.8, dashArray: '2 5', interactive: false }).addTo(m);
+      if (modes && res.runs.longest) L.polyline([ll(...res.runs.longest.a), ll(...res.runs.longest.b)], { renderer: rend, color: '#fff', weight: 2.5, dashArray: '2 6', interactive: false }).addTo(m);
       const labs = [];
       for (const f of fc.features) {
         const g = f.geometry, pr = f.properties; if (!g || pr.hidden) continue;
         const t = tags[pr.tag] || tags.other;
         // private docks shape the zones but aren't charted; imported or auto-detected features wait for review
         if (t.showOnMap === false || pr.status === 'unreviewed' || pr.status === 'imported') continue;
+        // hazards and marked points switched off on the map stay off the chart
+        if (!show.pins && (g.type === 'Point' || pr.tag === 'hazard' || pr.tag === 'caution')) continue;
         if (g.type === 'Point') {
           const at = L.latLng(g.coordinates[1], g.coordinates[0]);
           if (!box.contains(at)) continue;

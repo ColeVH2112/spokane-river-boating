@@ -4,10 +4,11 @@
  *   toKML(model[, {flat}]) / toGPX(model) / toGeoJSON(model)  -> strings
  *   zip([{name, data}], deflateRaw?)  -> Promise<Uint8Array>  (KMZ = zipped doc.kml)
  *   label(cfg, key, params) / labelDesc(...)  -> class names with the active distances
+ *   defaultParams(cfg) / sameRules(a, b) / surfTests(params)  -> the rule settings, shared by app, print page and build
  *   localDate()  -> YYYY-MM-DD on the river (Pacific time), for every stamp
  *
  * The same model feeds every format, so the PDF, KMZ, GPX and GeoJSON a boater
- * downloads all describe exactly the zones on screen.
+ * downloads all describe exactly the view on screen (ctx.view), under the rules set there.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -32,12 +33,29 @@
     try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'America/Los_Angeles' }).format(d || new Date()); }
     catch (_) { const x = d || new Date(); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
   }
+  // the rule settings the map opens with (config.rules): one definition for the app, the print page and the build
+  function defaultParams(cfg) {
+    const r = cfg.rules;
+    const pick = k => ({ ft: r[k].ft, shore: !!r[k].shore, structures: !!r[k].structures, minDepthFt: r[k].minDepthFt || 0 });
+    return { rules: { nowake: pick('nowake'), tow: pick('tow'), surf: Object.assign(pick('surf'), { minWidthFt: r.surf.minWidthFt || 0 }) }, passFt: r.pass.ft,
+             run: { ft: r.run.ft, laneFt: r.run.laneFt, stepDeg: r.run.stepDeg }, zonesOn: true, levelAdjust: true };
+  }
+  // the same rules? The water level a map is drawn at (today's or summer pool) is a display choice, not a rule
+  const rulesKey = p => JSON.stringify(Object.assign({}, p, { levelAdjust: true }));
+  const sameRules = (a, b) => rulesKey(a) === rulesKey(b);
+  // the wake-surf tests in words: "200 ft+ from shore and docks, 15 ft+ deep, 300 ft+ wide"
+  function surfTests(p, short) {
+    const s = p.rules.surf, out = [short ? `${s.ft} ft+` : `${s.ft} ft+ from shore${s.structures ? ' and docks' : ''}`];
+    if (s.minDepthFt > 0) out.push(`${s.minDepthFt} ft+ deep`);
+    if (s.minWidthFt > 0) out.push(`${s.minWidthFt} ft+ wide`);
+    return out.join(', ');
+  }
   // config class labels are templates: "Tow zone ({tow} ft+)" -> "Tow zone (200 ft+)" under a what-if
   function fill(tpl, p) {
     if (!tpl || !p) return tpl || '';
     const R = p.rules || {};
     const v = { nowake: R.nowake && R.nowake.ft, tow: R.tow && R.tow.ft, surf: R.surf && R.surf.ft, pass: p.passFt,
-                run: p.run && fmtFt(p.run.ft), lane: p.run && p.run.laneFt,
+                run: p.run && fmtFt(p.run.ft), lane: p.run && p.run.laneFt, surftests: R.surf ? surfTests(p, true) : '',
                 towpass: R.nowake && p.passFt != null ? 2 * R.nowake.ft + p.passFt : '' };
     return tpl.replace(/\{(\w+)\}/g, (m, k) => (v[k] != null ? v[k] : m));
   }
@@ -106,40 +124,88 @@
   function fmtAc(a) { return a >= 100 ? Math.round(a).toLocaleString('en-US') : a >= 10 ? a.toFixed(0) : a.toFixed(1); }
   const ZONE_STYLE = { no_wake: ['#8a1630', 0.45, 'Designated no-wake'], no_motor: ['#c2185b', 0.5, 'No motors'], no_entry: ['#111111', 0.6, 'No entry'] };
 
-  // ctx: { params, activity, official, levelOffsetFt, title, subtitle, url, generated, label, simplifyM, include: {docks, width} }
+  const VIEW_NAMES = { full: 'All zones', bottom: 'Boating', surf: 'Wake surfing', depth: 'Depth', pass: 'Passing', rule: 'One rule' };
+  const ACTIVITY = { nowake: ['A wake is allowed', 'boating with a wake'], tow: ['Towing allowed', 'towing'], surf: ['Wake surfing allowed', 'wake surfing'] };
+
+  // ctx: { params, activity, official, levelOffsetFt, title, subtitle, url, generated, label, simplifyM,
+  //        view: 'full' (every zone: the default set) | 'bottom' | 'surf' | 'depth' | 'pass' | 'rule', single,
+  //        depthBands: [{lo, hi, rings, area}], depthLine: {ft, rings}, shallow: {ft, rings, area},
+  //        include: {docks, width, narrow, pins} }
   function model(eng, res, features, cfg, ctx) {
     ctx = ctx || {};
     const tol = ctx.simplifyM != null ? ctx.simplifyM : 0.75;
     const p = ctx.params, R = p.rules, nd = 6, act = ctx.activity || 'tow';
+    const view = VIEW_NAMES[ctx.view] ? ctx.view : 'full', inc = ctx.include || {};
+    const tm = ctx.towOnMap !== false;          // false: no no-tow band (no wake / wake OK / wake-surf water), as the map draws it
+    const modes = view === 'full' || view === 'bottom' || view === 'surf';
     const classes = cfg.classes;
     const S = res.stats || {};
     const layers = [];
+    const tests = surfTests(p), extra = R.surf.minDepthFt > 0 || R.surf.minWidthFt > 0;
     const towTotal = `Tow zone in total (${R.tow.ft} ft+): ${fmtAc(S.tow_ok_ac || 0)} ac.` + (towHoursText(cfg) ? ' ' + towHoursText(cfg) : '');
     const bandDesc = {
       idle: `No wake — idle or steerage speed, never over 5 mph. Within ${R.nowake.ft} ft of shore${R.nowake.structures ? ', docks and structures' : ''}, plus the designated zones, which carry their own rules: ` +
         `no-wake zones 5 mph with a wake under 4 in, no-motor zones no motors at all, no-entry zones keep out (see "Designated zones").`,
       cruise: `Wake OK, no towing: ${R.nowake.ft}–${R.tow.ft} ft from shore${R.tow.structures ? '/docks/structures' : ''}. Inside the county's 150-ft no-tow setback: no skiing, tubing or wakeboarding; wake surfing treated the same (interpretation). Speed limits 35 mph day / 25 night.`,
-      tow: `Tow zone, ${R.tow.ft}–${R.surf.ft} ft from shore${R.tow.structures ? ', docks and structures' : ''} — outside ${cfg.rules.tow.zoneName || 'the no-tow setback'}: skiing, tubing, wakeboarding; wake surfing treated the same (interpretation). ${towTotal}`,
-      surf: `Tow zone that also meets the ${R.surf.ft}-ft wake-surf guideline from shore${R.surf.structures ? ', docks and structures' : ''} (WSIA Wake Responsibly / IDPR Mind Your Wake — guideline, not law)${R.surf.minDepthFt ? ` and is ${R.surf.minDepthFt} ft+ deep` : ''}. ${towTotal}`,
+      tow: (extra ? `Tow zone that is not wake-surf water: ${R.tow.ft} ft or more from shore${R.tow.structures ? ', docks and structures' : ''}, but missing a wake-surf test (${tests})`
+        : `Tow zone, ${R.tow.ft}–${R.surf.ft} ft from shore${R.tow.structures ? ', docks and structures' : ''}`) +
+        ` — outside ${cfg.rules.tow.zoneName || 'the no-tow setback'}: skiing, tubing, wakeboarding; wake surfing treated the same (interpretation). ${towTotal}`,
+      towok: `Tow zone: ${R.tow.ft} ft or more from shore${R.tow.structures ? ', docks and structures' : ''} — outside ${cfg.rules.tow.zoneName || 'the no-tow setback'}: skiing, tubing, wakeboarding; wake surfing treated the same (interpretation). ` +
+        (towHoursText(cfg) || ''),
+      surf: `Wake-surf water: ${tm ? 'tow zone that is also ' : ''}${tests}. The ${R.surf.ft}-ft distance is the WSIA Wake Responsibly / IDPR Mind Your Wake guideline` +
+        (extra ? '; the depth and width are the settings this map was asked to use' : '') + ` — none of it is law. ${tm ? towTotal : towHoursText(cfg)}`,
     };
+    // towing in the words of a file that doesn't draw the no-tow band
+    const towNote = `Towing a skier, tube or board also needs ${R.tow.ft} ft from shore${R.tow.structures ? ', docks and structures' : ''} (${cfg.rules.tow.zoneName || 'the no-tow setback'})` +
+      (res.lines ? `: the ${R.tow.ft}-ft no-tow line is with the rule lines.` : '.') + (towHoursText(cfg) ? ' ' + towHoursText(cfg) : '');
+    const wakeFrom = `${R.nowake.ft} ft or more from shore${R.nowake.structures ? ', docks and structures' : ''}${p.zonesOn !== false ? ', outside the designated zones' : ''}`;
+    bandDesc.wakeok = `Wake OK: ${wakeFrom}. Speed limits 35 mph day / 25 night. ${towNote}`;
+    bandDesc.wakenosurf = `Wake OK, outside the wake-surf water (${tests}): ${wakeFrom}. Speed limits 35 mph day / 25 night. ${towNote}`;
+    const wakeLabel = (classes.wake && classes.wake.label) || 'Wake OK';
     const bandName = {
+      wakeok: `${wakeLabel} (${R.nowake.ft} ft+)`, wakenosurf: `${wakeLabel}, no wake surfing`,
       idle: label(cfg, 'idle', p), cruise: label(cfg, 'cruise', p),
-      tow: `Tow zone, ${R.tow.ft}–${R.surf.ft} ft`, surf: `Tow zone + ${R.surf.ft}-ft surf guideline`,
+      tow: extra ? 'Tow zone, no wake surfing' : `Tow zone, ${R.tow.ft}–${R.surf.ft} ft`, towok: `Tow zone (${R.tow.ft} ft+)`,
+      surf: `Wake-surf water (${surfTests(p, true)})`,
     };
-    for (const key of ['idle', 'cruise', 'tow', 'surf']) {
-      const b = res.bands[key], c = classes[key];
-      layers.push({ id: key, name: bandName[key], group: 'zones', color: c.color, opacity: c.kmlOpacity || 0.5,
+    // Boating draws one tow zone; Wake surfing (and the default set) splits it into towing-only and wake-surf water
+    const bandKeys = !modes ? [] : tm ? (view === 'bottom' ? ['idle', 'cruise', 'towok'] : ['idle', 'cruise', 'tow', 'surf'])
+      : view === 'bottom' ? ['idle', 'wakeok'] : ['idle', 'wakenosurf', 'surf'];
+    const bandId = { towok: 'tow', wakeok: 'wake', wakenosurf: 'wake' };
+    for (const key of bandKeys) {
+      const b = res.bands[key], c = classes[bandId[key] || key] || classes.tow;
+      layers.push({ id: bandId[key] || key, name: bandName[key], group: 'zones', color: c.color, opacity: c.kmlOpacity || 0.5,
         area_ac: b.area / ACRE, desc: bandDesc[key], polygons: polysLonLat(eng, b.rings, tol, nd) });
     }
-    if (res.runs && res.runs.rings.length) {
+    if (view === 'depth' && ctx.depthBands) {
+      const d = cfg.depth, when = ctx.levelOffsetFt ? "today's lake level" : 'summer full pool';
+      ctx.depthBands.forEach((b, i) => layers.push({ id: 'depth_' + i, name: 'Depth ' + (d.labels[i] || `${b.lo} ft+`), group: 'depth', color: d.colors[i] || '#2f84c8', opacity: 0.6,
+        area_ac: b.area / ACRE, desc: `Water ${d.labels[i] || `${b.lo} ft or more`} deep at ${when}. From 5-ft contours: screening only.`, polygons: polysLonLat(eng, b.rings, tol, nd) }));
+    }
+    if (view === 'rule' && res.single) {
+      const a = ACTIVITY[res.single.rule] || ACTIVITY.nowake;
+      const why = res.single.rule === 'surf' ? tests : `${R[res.single.rule].ft} ft or more from shore${R[res.single.rule].structures ? ' and docks' : ''}`;
+      layers.push({ id: 'allowed', name: a[0], group: 'single', color: '#2bb673', opacity: 0.5, area_ac: res.single.area / ACRE,
+        desc: `Where ${a[1]} is allowed: ${why}${p.zonesOn ? ', outside the designated zones' : ''}. Everywhere else on the water it is not.`,
+        polygons: polysLonLat(eng, res.single.rings, tol, nd) });
+    }
+    // the hatched water on the map: shallow where a wake is otherwise allowed
+    if (modes && ctx.shallow && ctx.shallow.rings && ctx.shallow.rings.length) {
+      const ft = ctx.shallow.ft;
+      layers.push({ id: 'shallow', name: `Hazardously shallow (under ${ft} ft)`, group: 'shallow', color: '#111111', opacity: 0.4, area_ac: ctx.shallow.area / ACRE,
+        desc: `Water under ${ft} ft deep at ${ctx.levelOffsetFt ? "today's lake level" : 'summer full pool'} where a wake is otherwise allowed. From 5-ft contours (2004): screening only.`,
+        polygons: polysLonLat(eng, ctx.shallow.rings, tol, nd) });
+    }
+    if (modes && res.runs && res.runs.rings.length) {
       const c = classes.runs;
       layers.push({ id: 'runs', name: `Straight lanes ${fmtFt(p.run.ft)} ft+`, group: 'runs',
         color: c.color, opacity: 0.25, outline: true, area_ac: res.runs.area / ACRE,
-        desc: `Straight lanes at least ${fmtFt(p.run.ft)} ft long and ${Math.round(res.runs.laneFt)} ft wide inside the ${act === 'surf' ? 'wake-surf' : 'tow'} zone.`,
+        desc: `Straight lanes at least ${fmtFt(p.run.ft)} ft long and ${Math.round(res.runs.laneFt)} ft wide inside the ` +
+          (act === 'surf' ? 'wake-surf water.' : tm ? 'tow zone.' : `towing water (${R.tow.ft} ft or more from shore${R.tow.structures ? ', docks and structures' : ''}).`),
         polygons: polysLonLat(eng, res.runs.rings, tol, nd) });
     }
-    if (res.width && ctx.include && ctx.include.width) {
-      for (const key of ['narrow', 'twoway', 'surfpass']) {
+    if (res.width && (inc.width || inc.narrow)) {
+      for (const key of inc.width ? ['narrow', 'twoway', 'surfpass'] : ['narrow']) {
         const b = res.width.classes[key], c = classes[key];
         layers.push({ id: key, name: label(cfg, key, p), group: 'width', color: c.color, opacity: 0.45, area_ac: b.area / ACRE,
           desc: labelDesc(cfg, key, p), polygons: polysLonLat(eng, b.rings, tol, nd) });
@@ -151,7 +217,15 @@
       const defs = [['wake', `${R.nowake.ft}-ft no-wake line`, `No-wake setback: no wake on the shore side of this line (${R.nowake.ft} ft from shore${R.nowake.structures ? ' and docks' : ''}). Designated zones apply on their own.`, classes.cruise.color],
                     ['tow', `${R.tow.ft}-ft no-tow line`, `County no-tow setback: no towing on the shore side of this line (${R.tow.ft} ft from shore${R.tow.structures ? ' and docks' : ''}).`, classes.tow.color],
                     ['surf', `${R.surf.ft}-ft surf-guideline line`, `The ${R.surf.ft}-ft wake-surf guideline is met on the river side of this line (guideline, not law).`, classes.surf.color]];
-      for (const [k, name, desc, color] of defs) if (res.lines[k]) ruleLines.push({ id: k, name, desc, color, rings: ringsLonLat(eng, res.lines[k], Math.max(tol, 1.5), nd) });
+      const want = view === 'bottom' ? ['wake', 'tow'] : modes ? ['wake', 'tow', 'surf'] : [];      // the lines stay complete even where the bands are simplified: a plotter has only lines to go on
+      if (!tm) defs[0][3] = (classes.wake || classes.tow).color;       // no orange band in this file: the no-wake line takes the colour of the water it opens
+      if (extra) { defs[2][1] = 'Wake-surf water edge'; defs[2][2] = `Wake-surf water (${tests}) is on the river side of this line (guideline and map settings, not law).`; }
+      for (const [k, name, desc, color] of defs) if (res.lines[k] && want.includes(k)) ruleLines.push({ id: k, name, desc, color, rings: ringsLonLat(eng, res.lines[k], Math.max(tol, 1.5), nd) });
+    }
+    if (ctx.depthLine && ctx.depthLine.rings) {
+      const ft = ctx.depthLine.ft;
+      ruleLines.push({ id: 'depth', name: `${ft}-ft depth line`, color: '#4fb8dc', rings: ringsLonLat(eng, ctx.depthLine.rings, Math.max(tol, 1.5), nd),
+        desc: `The water is ${ft} ft or deeper on the river side of this line, at ${ctx.levelOffsetFt ? "today's lake level" : 'summer full pool'} (5-ft contours: screening only).` });
     }
     // designated zones + the lake approach (all no-wake)
     const zonePolys = [];
@@ -180,7 +254,11 @@
       if (ZONE_TAGS[pr.tag] || pr.hidden || PENDING[pr.status]) continue;   // pending features aren't part of the map yet
       // private docks (showOnMap: false) shape the zones but aren't boater waypoints: in only when asked (GIS, the in-app option)
       const offMap = t.showOnMap === false;
-      if (offMap && !(ctx.include && ctx.include.docks)) continue;
+      if (offMap && !inc.docks) continue;
+      const g0 = f.geometry;
+      // hazards and marked points switched off on the map: left out of the file too
+      // (private docks are their own choice, made above)
+      if (inc.pins === false && !offMap && ((g0 && g0.type === 'Point') || pr.tag === 'hazard' || pr.tag === 'caution')) continue;
       const base = { name: pr.name || t.label, named: !!pr.name, short: pr.short || '', tag: pr.tag, label: t.label, note: pr.note || '', color: t.color, offMap,
         status: pr.status || '', structure: pr.structure != null ? !!pr.structure : !!t.structure, sym: t.gpx, icon: t.kml, gpxShort: t.short || '' };
       const g = f.geometry;
@@ -191,14 +269,14 @@
     }
     // a "longest lane" is only a lane when it meets the length
     let longest = null;
-    if (res.runs && res.runs.longest) {
+    if (modes && res.runs && res.runs.longest) {
       const ft = res.runs.longest.m / 0.3048;
       longest = { ft, meets: ft >= p.run.ft,
         coords: [res.runs.longest.a, res.runs.longest.b].map(([x, y]) => eng.toLonLat(x, y).map(v => round(v, 7))) };
     }
     return {
       title: ctx.title || cfg.title, subtitle: ctx.subtitle || cfg.subtitle, url: ctx.url || '',
-      generated: ctx.generated || localDate(), label: ctx.label || '', activity: act,
+      generated: ctx.generated || localDate(), label: ctx.label || '', activity: act, view, viewName: VIEW_NAMES[view], towOnMap: tm,
       status: cfg.status || '', mapVersion: cfg.mapVersion || '', rulesAsOf: cfg.rulesAsOf || '',
       official: !!ctx.official, levelOffsetFt: ctx.levelOffsetFt || 0,
       disclaimer: cfg.disclaimer, credits: cfg.credits, madeBy: cfg.madeBy || '', stats: S, params: p,
@@ -232,7 +310,7 @@
     const style = (id, line, lineW, fill, fillOn) => st.push(
       `<Style id="${id}"><LineStyle><color>${line}</color><width>${lineW}</width></LineStyle>` +
       `<PolyStyle><color>${fill}</color><fill>${fillOn ? 1 : 0}</fill><outline>1</outline></PolyStyle></Style>`);
-    const folders = { zones: [], runs: [], width: [], rules: [], lines: [] };
+    const folders = { zones: [], runs: [], width: [], rules: [], lines: [], depth: [], single: [], shallow: [] };
     for (const [t, [c, o]] of Object.entries(ZONE_STYLE)) style('s_zone_' + t, hexToKml(c, 0.95), 2, hexToKml(c, o), true);
     for (const L of m.layers) {
       style('s_' + L.id, hexToKml(L.color, 0.95), L.outline ? 3 : 1.2, hexToKml(L.color, L.opacity), true);
@@ -293,13 +371,16 @@
     const folder = (name, items, open, hidden) => !items.length ? '' : flat ? items.join('')
       : `<Folder><name>${xmlEsc(name)}</name>${hidden ? '<visibility>0</visibility>' : ''}<open>${open ? 1 : 0}</open>${items.join('')}</Folder>`;
     const s = m.stats || {};
-    const summary = `${m.subtitle}. ${m.label ? m.label + '. ' : ''}Of ${fmtAc(s.water_ac || 0)} acres: tow zone ${fmtAc(s.tow_ok_ac || 0)} ac, ` +
-      `of which ${fmtAc(s.surf_ok_ac || 0)} ac also meet the ${m.params.rules.surf.ft}-ft surf guideline; ${s.run_zones || 0} straight lane${s.run_zones === 1 ? '' : 's'} of ${fmtFt(m.params.run.ft)} ft or more. ` +
+    const summary = `${m.subtitle}. ${m.view && m.view !== 'full' ? m.viewName + ' view. ' : ''}${m.label ? m.label + '. ' : ''}Of ${fmtAc(s.water_ac || 0)} acres: ${m.towOnMap === false ? `a wake is allowed on ${fmtAc(s.wake_ok_ac || 0)} ac` : `tow zone ${fmtAc(s.tow_ok_ac || 0)} ac`}, ` +
+      `of which ${fmtAc(s.surf_ok_ac || 0)} ac are wake-surf water (${surfTests(m.params)}); ${s.run_zones || 0} straight lane${s.run_zones === 1 ? '' : 's'} of ${fmtFt(m.params.run.ft)} × ${fmtFt(m.params.run.laneFt)} ft or more. ` +
       `${m.towHours ? m.towHours + ' ' : ''}${stamp(m)}. ${m.disclaimer} ${m.madeBy || ''}${m.url ? ' Interactive map: ' + m.url : ''}`;
     body.push(folder('Setback bands', folders.zones, true));
+    body.push(folder('Where it is allowed', folders.single, true));
+    body.push(folder('Depth', folders.depth, true));
     body.push(folder('Rule lines', folders.lines, false));
     body.push(folder('Straight lanes', folders.runs, true));
-    body.push(folder('Room to pass', folders.width, false));
+    body.push(folder('Shallow water', folders.shallow, true));
+    body.push(folder('Passing (channel width)', folders.width, false));
     body.push(folder('Designated zones (no wake, no motors, no entry)', folders.rules, true));
     for (const [lbl, items] of Object.entries(featFolders)) body.push(folder(lbl, items, false, hiddenFolders.has(lbl)));
     const draft = m.status && /draft/i.test(m.status) ? ' (DRAFT)' : '';
@@ -352,7 +433,8 @@
     for (const ln of m.ruleLines || []) trk(ln.name, ln.desc, 'rule-line', ln.rings);
     for (const L of m.layers) {
       if (L.parts) { for (const part of L.parts) trk(part.name, `${(ZONE_STYLE[part.type] || ZONE_STYLE.no_wake)[2]}${part.when === 'posted' ? ' (when posted)' : ''}. ${part.note || ''}`, part.type || 'no_wake', part.polygons.flat()); continue; }
-      if (L.id === 'runs' || L.group === 'width') (L.polygons || []).forEach((pg, k) => trk(`${L.name}${L.polygons.length > 1 ? ' ' + (k + 1) : ''}`, L.desc, L.id, pg));
+      if (L.group === 'shallow') { trk(L.name, L.desc, 'shallow', (L.polygons || []).flat()); continue; }     // one track, a segment per patch
+      if (L.id === 'runs' || L.group === 'width' || L.group === 'single') (L.polygons || []).forEach((pg, k) => trk(`${L.name}${L.polygons.length > 1 ? ' ' + (k + 1) : ''}`, L.desc, L.id, pg));
     }
     for (const ln of m.lines) trk(ln.name, [ln.label, ln.note].filter(Boolean).join(' — '), ln.tag, [ln.coords]);
     for (const ar of m.areas) trk(ar.name, [ar.label, ar.note].filter(Boolean).join(' — '), ar.tag, ar.polygons.flat());
@@ -362,7 +444,7 @@
       `<gpx version="1.1" creator="${xmlEsc(m.title)} map" xmlns="http://www.topografix.com/GPX/1/1" ` +
       'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
       'xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">\n' +
-      `<metadata><name>${xmlEsc(m.title)}</name><desc>${xmlEsc(m.subtitle + (m.label ? ' · ' + m.label : '') + '. ' + (m.towHours ? m.towHours + ' ' : '') + stamp(m) + '. ' + m.disclaimer + (m.madeBy ? ' ' + m.madeBy + '.' : ''))}</desc>` +
+      `<metadata><name>${xmlEsc(m.title)}</name><desc>${xmlEsc(m.subtitle + (m.view && m.view !== 'full' ? ' · ' + m.viewName + ' view' : '') + (m.label ? ' · ' + m.label : '') + '. ' + (m.towHours ? m.towHours + ' ' : '') + stamp(m) + '. ' + m.disclaimer + (m.madeBy ? ' ' + m.madeBy + '.' : ''))}</desc>` +
       (m.url ? `<link href="${xmlEsc(m.url)}"><text>Interactive map</text></link>` : '') +
       `<time>${m.generated}T12:00:00Z</time><keywords>${xmlEsc(kw)}</keywords></metadata>\n` +
       wpts + '\n' + trks.join('\n') + '\n</gpx>\n';
@@ -398,7 +480,7 @@
       geometry: { type: 'LineString', coordinates: m.longest.coords } });
     return JSON.stringify({ type: 'FeatureCollection', name: m.title,
       metadata: { subtitle: m.subtitle, generated: m.generated, status: m.status, map_version: m.mapVersion, rules_as_of: m.rulesAsOf,
-        official: m.official, activity: m.activity, level_offset_ft: m.levelOffsetFt, criteria: m.label, rules: m.params, stats: m.stats,
+        official: m.official, view: m.view, activity: m.activity, level_offset_ft: m.levelOffsetFt, criteria: m.label, rules: m.params, stats: m.stats,
         tow_hours: m.towHours, disclaimer: m.disclaimer, credits: m.credits, made_by: m.madeBy, url: m.url },
       features: feats });
   }
@@ -491,5 +573,5 @@
   }
 
   return { model, toKML, toGPX, toGeoJSON, zip, browserDeflateRaw, crc32, xmlEsc, hexToKml, engineInputs, coordsOK,
-           label, labelDesc, fill, localDate, stamp, shortName, ZONE_TAGS };
+           label, labelDesc, fill, localDate, stamp, shortName, ZONE_TAGS, defaultParams, sameRules, surfTests, VIEW_NAMES };
 });

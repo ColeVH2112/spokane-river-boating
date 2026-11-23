@@ -29,6 +29,7 @@
       "ft": 150,
       "shore": true,
       "structures": true,
+      "onMap": false,
       "min": 0,
       "max": 400,
       "step": 5,
@@ -36,7 +37,7 @@
       "label": "No-towing buffer",
       "who": "Kootenai County",
       "text": "No towing a waterskier, tube, wakeboard, kneeboard or \"any other type of appliance\" between the 100-ft no-wake band and 150 ft from the shoreline or any dock, pier or other structure (the river's \"No Waterskiing Zone\").",
-      "mapping": "Drawn 150 ft from the shoreline and every dock and structure. Wake surfing isn't named in the code. HLWID's draft legend and a citizen presentation to the county Waterways Advisory Board (June 2025) treat it as covered; the county has not said so in writing. This map treats it as covered — an interpretation, not a ruling. County rules apply outside city limits: inside Coeur d'Alene (near the outlet and a thin north-bank strip) the 100–150 ft band is \"no excessive wake\" instead.",
+      "mapping": "Not drawn as its own band, to keep the map to three colours (no wake, wake OK, wake surfing). The 150-ft line still applies. Tap any spot for its no-tow check, or choose One rule → Tow to see the whole no-towing band; the GPS banner reports it on the water. Wake surfing isn't named in the code. HLWID's draft legend and a citizen presentation to the county Waterways Advisory Board (June 2025) treat it as covered; the county has not said so in writing. This map treats it as covered — an interpretation, not a ruling. County rules apply outside city limits: inside Coeur d'Alene (near the outlet and a thin north-bank strip) the 100–150 ft band is \"no excessive wake\" instead.",
       "citation": "Kootenai County Code § 6.2.122(A)(3)(b), adopted by Resolution 2023-42 (Apr. 5, 2023)",
       "url": "https://codelibrary.amlegal.com/codes/kootenaicountyid/latest/kootenaicounty_id/0-0-0-12985",
       "force": "law",
@@ -50,33 +51,34 @@
       "min": 0,
       "max": 500,
       "step": 5,
-      "minDepthFt": 0,
-      "label": "Wake-surf guideline",
+      "minDepthFt": 15,
+      "minWidthFt": 300,
+      "label": "Wake surfing",
       "who": "WSIA + Idaho Parks & Recreation",
       "text": "Wake and surf boats: stay at least 200 ft from shore, docks and other boats, keep music reasonable, and vary your line instead of repeating the same pass. Industry statements of the same guideline (WSIA via MasterCraft; NMMA) add \"in at least 10 ft of water\".",
-      "mapping": "Drawn 200 ft from the shoreline and every dock and structure. The dashed line in the Wake surf view marks 10 ft of water today. On a narrow river this guideline pulls surf boats to mid-channel, which can conflict with keeping right when meeting traffic (Inland Rule 9).",
+      "mapping": "Wake-surf water is drawn 200 ft from the shoreline and every dock and structure, and only where the water is at least 15 ft deep and the surf water itself is at least 300 ft wide. The 200 ft is the published guideline; the 15-ft depth and 300-ft width are the settings HLWID's review asked this map to use, and are not law. The dotted line in the Wake surfing and Depth views marks 20 ft of water. On a narrow river this guideline pulls surf boats to mid-channel, which can conflict with keeping right when meeting traffic (Inland Rule 9).",
       "citation": "WSIA \"Wake Responsibly\"; IDPR \"Mind Your Wake\"",
       "url": "https://recreate.idaho.gov/story/mind-your-wake/",
       "force": "guideline",
-      "short": "200-ft surf guideline"
+      "short": "wake-surf guideline"
     },
     "pass": {
       "ft": 100,
       "min": 0,
       "max": 300,
       "step": 5,
-      "label": "Room to pass",
+      "label": "Passing distance",
       "who": "Built on Idaho, county and federal rules",
       "text": "No statute sets a 100-ft passing distance. Idaho makes negligent operation within 100 ft of another vessel unlawful, the county caps speed at 15 mph within 50 ft of another vessel, and the Inland Rules require a lookout, a safe speed, keeping to the starboard side of a narrow channel, passing port-to-port, and a sound signal at blind bends.",
-      "mapping": "The Room-to-pass view shows where the channel leaves 100 ft between two passing boats that each stay outside the no-wake band, and where a surf boat can hold its line with traffic on either side.",
+      "mapping": "The Boating and Wake surfing views mark water too narrow for two boats to pass 100 ft apart while each stays outside the no-wake band. The Passing view also shows where a surf boat can hold its line with traffic on either side.",
       "citation": "Idaho Code § 67-7077(a); Kootenai County Code § 6.2.104(C)(5); 33 CFR §§ 83.05, 83.06, 83.09, 83.13, 83.14, 83.34 (Inland Rules 5, 6, 9, 13, 14, 34)",
       "url": "https://legislature.idaho.gov/statutesrules/idstat/title67/t67ch70/sect67-7077/",
       "force": "guidance",
-      "short": "Room to pass"
+      "short": "Passing"
     },
     "run": {
       "ft": 3000,
-      "laneFt": 50,
+      "laneFt": 300,
       "activity": "tow",
       "stepDeg": 0.5,
       "min": 0,
@@ -98,6 +100,12 @@
       "opacity": 0.55,
       "kmlOpacity": 0.45
     },
+    "wake": {
+      "label": "Wake OK",
+      "color": "#ffd83b",
+      "opacity": 0.55,
+      "kmlOpacity": 0.5
+    },
     "tow": {
       "label": "Tow zone ({tow} ft+)",
       "color": "#ffd83b",
@@ -105,7 +113,7 @@
       "kmlOpacity": 0.5
     },
     "surf": {
-      "label": "Tow zone + {surf}-ft surf guideline",
+      "label": "Wake-surf water",
       "color": "#7d55e8",
       "opacity": 0.6,
       "kmlOpacity": 0.5
@@ -160,9 +168,9 @@
       "30 ft +"
     ],
     "fullPoolGageFt": 28.0,
-    "note": "Depths are feet below the 2,128 ft summer full pool, from 5-ft bathymetric contours (Coeur d'Alene Tribe / Avista, 2004). When live data is available they are lowered by today's drop in Lake Coeur d'Alene.",
+    "note": "Depths are feet below the 2,128 ft summer full pool, from 5-ft bathymetric contours (Coeur d'Alene Tribe / Avista, 2004). With \"Today's water level\" switched on (and live data available) they are lowered by today's drop in Lake Coeur d'Alene.",
     "shallowFt": 5,
-    "surfLineFt": 10
+    "surfLineFt": 20
   },
   "tags": [
     {
@@ -492,7 +500,7 @@
     "x": 158,
     "y": 89
   },
-  "credits": "Shoreline: USGS 3DHP (2023), the same outline as the HLWID ArcGIS draft; lake approach: USGS NHD High Resolution. Depth: Coeur d'Alene Tribe / Avista Corp. bathymetric contours (5-ft interval, 2004 compilation). Docks: OpenStreetMap piers plus docks added by hand; the shoreline outline notches around many larger docks. Automatic detections are left out until reviewed. Piers, booms, swim areas: © OpenStreetMap contributors (ODbL). Imagery: USGS The National Map (public domain); Esri World Imagery optional. Live data: USGS Water Services, NOAA/NWS.",
+  "credits": "Shoreline: USGS 3DHP (2023), the same outline as the HLWID ArcGIS draft; lake approach: USGS NHD High Resolution. Depth: Coeur d'Alene Tribe / Avista Corp. bathymetric contours (5-ft interval, 2004 compilation). Docks: OpenStreetMap piers plus docks added by hand; the shoreline outline notches around many larger docks. Automatic detections are left out until reviewed. Piers, booms, swim areas: © OpenStreetMap contributors (ODbL). Imagery: USGS The National Map (public domain); Esri World Imagery optional. Live data: USGS Water Data API, NOAA/NWS.",
   "disclaimer": "Screening map, not a navigation chart or legal determination. Posted buoys, signs and officers govern. A dock, boom or swim float missing from our data still counts — keep 100 ft (no wake) and 150 ft (no towing). Rules about swimmers, divers and moving boats can't be mapped — keep the required distance from anyone you see. Setbacks are measured from the summer full-pool shoreline; the law measures from today's waterline, so at low water the lines sit further out. Zone boundaries are approximate (not yet surveyed).",
   "towHours": {
     "afterSunsetMin": 60,
@@ -659,12 +667,12 @@
     {
       "id": "law",
       "label": "Current rules",
-      "desc": "Today's Idaho and Kootenai County rules, measured from shore and every dock."
+      "desc": "Today's Idaho and Kootenai County rules, measured from shore and every dock. Wake-surf water uses the review settings (200 ft, 15 ft deep, 300 ft wide), which are not law."
     },
     {
       "id": "arcgis",
       "label": "Shore only (HLWID ArcGIS)",
-      "desc": "Buffers from the shoreline only, no docks and no designated zones — the method in the HLWID ArcGIS draft."
+      "desc": "Buffers from the shoreline only: no docks, no designated zones and no depth or width test — the method in the HLWID ArcGIS draft."
     },
     {
       "id": "county200",
@@ -674,12 +682,12 @@
     {
       "id": "surf10",
       "label": "Surf only 10 ft+ deep",
-      "desc": "Industry depth guidance (WSIA via MasterCraft; NMMA): wake surf only where today's depth is 10 ft or more."
+      "desc": "Industry depth guidance (WSIA via MasterCraft; NMMA): wake surf where today's depth is 10 ft or more, in place of this map's 15 ft."
     },
     {
       "id": "surf20",
       "label": "Surf only 20 ft+ deep",
-      "desc": "The deeper standard from Vermont's rule and a 2025 local proposal: wake surf only where today's depth is 20 ft or more."
+      "desc": "The deeper standard from Vermont's rule and a 2025 local proposal: wake surf only where the depth is 20 ft or more."
     },
     {
       "id": "vermont",

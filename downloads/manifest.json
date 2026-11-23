@@ -1,19 +1,21 @@
 {
- "built": "2026-10-19",
- "label": "Current rules: no wake within 100 ft · no towing within 150 ft · surf guideline 200 ft (from shore and docks) · lanes 3,000 ft",
+ "built": "2026-11-23",
+ "label": "Current rules: no wake within 100 ft · no towing within 150 ft (from shore and docks) · wake-surf guide, not law: 200 ft+, 15 ft+ deep, 300 ft+ wide · lanes 3,000 × 300 ft",
  "stats": {
   "water_ac": 665.9085098995942,
   "zone_ac": 85.63884896258647,
   "idle_ac": 295.29330568639534,
   "cruise_ac": 99.40547301682554,
-  "tow_ac": 97.05321597309421,
-  "surf_ac": 174.14642857298628,
-  "wake_ok_ac": 370.60511756290606,
-  "tow_ok_ac": 271.1996445460805,
-  "surf_ok_ac": 174.14642857298628,
-  "runs_ac": 106.37815972164839,
-  "run_zones": 3,
-  "longest_run_ft": 4232.19705537799
+  "tow_ac": 252.9368559428011,
+  "surf_ac": 18.274400136049035,
+  "wake_ok_ac": 370.6167290956757,
+  "tow_ok_ac": 271.2112560788501,
+  "surf_ok_ac": 18.274400136049035,
+  "runs_ac": 0,
+  "run_zones": 0,
+  "longest_run_ft": 0,
+  "surf_dist_ac": 174.14642857298628,
+  "surf_depth_ac": 90.47862023957325
  },
  "features": {
   "total": 544,
@@ -23,27 +25,32 @@
   {
    "name": "spokane-river-boating-zones.geojson",
    "ext": "geojson",
-   "size_kb": 455
+   "size_kb": 314
   },
   {
    "name": "spokane-river-boating-zones.gpx",
    "ext": "gpx",
-   "size_kb": 183
+   "size_kb": 148
   },
   {
    "name": "spokane-river-boating-zones.kml",
    "ext": "kml",
-   "size_kb": 378
+   "size_kb": 237
   },
   {
    "name": "spokane-river-boating-zones.kmz",
    "ext": "kmz",
-   "size_kb": 87
+   "size_kb": 53
   },
   {
    "name": "spokane-river-boating-zones.pdf",
    "ext": "pdf",
-   "size_kb": 1875
+   "size_kb": 837
+  },
+  {
+   "name": "spokane-river-boating-zones.zip",
+   "ext": "zip",
+   "size_kb": 828
   }
  ]
 }

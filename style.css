@@ -63,16 +63,37 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: .9rem 1rem; }
 
 /* map overlays */
-.views { position: absolute; z-index: 800; top: .7rem; left: 3.4rem; display: flex; gap: 2px; padding: 3px;
+.mapbars { position: absolute; z-index: 800; top: .7rem; left: 3.4rem; max-width: calc(100% - 7.5rem); display: flex; flex-direction: column;
+           align-items: flex-start; gap: .3rem; pointer-events: none; }
+.mapbars > * { pointer-events: auto; }
+.views { display: flex; align-items: center; gap: 2px; padding: 3px;
          background: rgba(9,24,35,.86); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.3);
-         max-width: calc(100% - 7.5rem); overflow-x: auto; scrollbar-width: none; }
+         max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .views::-webkit-scrollbar { display: none; }
 .view { flex: none; font: 600 .78rem var(--font); color: #cfe2ee; background: transparent; border: 0; border-radius: 8px;
         padding: .42rem .7rem; cursor: pointer; white-space: nowrap; }
 .view:hover { color: #fff; background: rgba(255,255,255,.08); }
 .view.on { background: #fff; color: #0b2f4a; }
-.rulepick { position: absolute; z-index: 800; top: 3.45rem; left: 3.4rem; display: flex; align-items: center; gap: .3rem;
+/* Boating and Wake surfing are the map; the other three views are extras */
+.view.more { font-weight: 500; font-size: .74rem; padding: .42rem .55rem; }
+.vsep { flex: none; width: 1px; align-self: stretch; margin: .3rem .25rem; background: rgba(255,255,255,.28); }
+.rulepick, .showbar { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; max-width: 100%;
             background: rgba(9,24,35,.82); color: #cfe2ee; padding: .3rem .45rem; border-radius: 9px; font: .74rem var(--font); }
+.chip.tog { padding-left: .5rem; color: #9fb4c2; border-style: dashed; }
+.chip.tog::before { content: "○ "; }
+.chip.tog.on { color: #0b2f4a; border-style: solid; }
+.chip.tog.on::before { content: "✓ "; }
+.chip.tog.na { opacity: .7; }
+.chip[hidden] { display: none; }
+.measurebar { position: absolute; z-index: 810; left: 50%; bottom: 3.2rem; transform: translateX(-50%); max-width: calc(100% - 1.4rem);
+              background: rgba(9,24,35,.9); color: #fff; font: 600 .8rem var(--font); padding: .4rem .8rem; border-radius: 999px;
+              box-shadow: 0 4px 16px rgba(0,0,0,.3); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leaflet-container.measuring, .leaflet-container.measuring .leaflet-interactive { cursor: crosshair !important; }
+.measure-tip { background: #0b2f4a; color: #fff; border: 0; border-radius: 7px; font: 700 .8rem var(--font); padding: .2rem .5rem; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+.measure-tip::before { display: none; }
+.measure-dot { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 3px solid #0b2f4a; box-shadow: 0 0 0 1px rgba(255,255,255,.7); }
+.sw.stipple { background: radial-gradient(circle at 30% 30%, #0b2f4a 0 1.6px, transparent 1.8px), radial-gradient(circle at 75% 75%, #0b2f4a 0 1.6px, transparent 1.8px), #e9eef2; border: 1px solid #0b2f4a; }
+.sw.shallow { background: repeating-linear-gradient(-45deg, #111 0 3px, rgba(255,255,255,.55) 3px 7px); }
 .chip { font: 600 .74rem var(--font); border-radius: 999px; border: 1px solid rgba(255,255,255,.25); background: transparent;
         color: #e6f0f6; padding: .2rem .6rem; cursor: pointer; }
 .chip.on { background: #fff; color: #0b2f4a; border-color: #fff; }
@@ -144,7 +165,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .eb-count { flex: none; color: #8ff0b6; font-variant-numeric: tabular-nums; }
 .eb-flash { flex: none; color: #ffd479; text-align: right; }
 .eb-flash:not([hidden]) + .eb-count { display: none; }
-.mapcol.editing .views, .mapcol.editing .rulepick { display: none !important; }
+.mapcol.editing .mapbars, .mapcol.editing .views, .mapcol.editing .rulepick, .mapcol.editing .showbar, .mapcol.editing .measurebar { display: none !important; }
 .mapcol.editing #hwBanner.hwbanner { top: calc(var(--ebh, 5.6rem) + .4rem); }   /* under the edit bar (app.js measures it), whatever the view */
 .mapcol.editing .busy { top: auto; bottom: 3.4rem; right: .6rem; }
 .howto-docks { margin: .2rem 0 .6rem; padding-left: 1.2rem; font-size: .76rem; color: var(--ink-2); }
@@ -160,9 +181,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
                  border: 1px solid rgba(255,255,255,.35); border-radius: 7px; padding: .15rem .55rem; cursor: pointer; }
 
 /* high-water override */
-.hwbanner { position: absolute; z-index: 820; left: 50%; top: 3.6rem; transform: translateX(-50%); width: min(640px, calc(100% - 1.4rem));
+.hwbanner { position: absolute; z-index: 820; left: 50%; top: calc(var(--barsh, 5.7rem) + .5rem); transform: translateX(-50%); width: min(640px, calc(100% - 1.4rem));
             background: #a32633; color: #fff; font: .84rem var(--font); padding: .55rem .8rem; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.35); text-align: center; }
-#rulepick:not([hidden]) ~ .hwbanner { top: 6rem; }
 
 /* hero (executive summary) */
 .hero-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
@@ -342,6 +362,13 @@ select { font: .78rem var(--font); padding: .35rem .4rem; border-radius: 8px; bo
 .dlcard .fmt { font-weight: 800; font-size: 1.25rem; color: var(--deep); }
 .dlcard p { margin: 0; font-size: .82rem; color: var(--ink-2); flex: 1; }
 .dlcard .meta { font-size: .7rem; color: var(--ink-3); }
+.dlnow { font-size: .86rem; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+         border-radius: 8px; padding: .5rem .7rem; margin: 0 0 1rem; }
+.note.dlnow { font-size: .76rem; padding: .4rem .55rem; margin: 0 0 .6rem; }
+.dldefault { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; border: 1px dashed var(--line); border-radius: var(--radius);
+             padding: .8rem 1rem; margin-bottom: 1.4rem; font-size: .84rem; color: var(--ink-2); }
+.dldefault b { color: var(--ink); }
+.dldefault .meta { font-size: .7rem; color: var(--ink-3); }
 .howto { display: grid; gap: .5rem; max-width: 820px; }
 .howto details { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .9rem; background: var(--bg); }
 .howto summary { cursor: pointer; font-weight: 700; }
@@ -380,12 +407,10 @@ select { font: .78rem var(--font); padding: .35rem .4rem; border-radius: 8px; bo
   .app { grid-template-columns: minmax(0, 1fr); height: auto; }
   .mapcol { height: 64dvh; min-height: 380px; }
   .panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
-  .views { left: .6rem; top: .6rem; max-width: calc(100% - 4.2rem); }
+  .mapbars { left: .6rem; top: .6rem; max-width: calc(100% - 4.2rem); }
   .editbar { left: .5rem; right: 3.9rem; top: .5rem; padding: .35rem .4rem .3rem; }
   .mapcol.editing .legend { display: none; }         /* the edit bar has the zones switch */
-  .rulepick { left: .6rem; top: 3.2rem; }
-  .hwbanner { left: .6rem; right: 4.2rem; width: auto; transform: none; top: 3.3rem; }
-  #rulepick:not([hidden]) ~ .hwbanner { top: 5.9rem; }
+  .hwbanner { left: .6rem; right: 4.2rem; width: auto; transform: none; }
   .gpsbar { top: auto; bottom: 0; font-size: .92rem; padding: .5rem .7rem calc(.5rem + env(safe-area-inset-bottom)); }
   .gpsbar small { display: block; margin: .15rem 0 0; font-size: .7rem; }
   .legend { left: .5rem; bottom: 2.6rem; font-size: .72rem; max-width: calc(100% - 5.5rem); }   /* above a two-line imagery credit */
@@ -412,4 +437,4 @@ select { font: .78rem var(--font); padding: .35rem .4rem; border-radius: 8px; bo
   .page { padding: 2rem .9rem; }
   .page h2 { font-size: 1.35rem; }
 }
-@media print { .top, .panel, .views, .legend, .gpsbar, .page, .foot { display: none !important; } }
+@media print { .top, .panel, .mapbars, .measurebar, .legend, .gpsbar, .page, .foot { display: none !important; } }

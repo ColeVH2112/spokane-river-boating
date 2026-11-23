@@ -532,14 +532,14 @@
           for (let i = 0; i < N; i++) if (inside[i]) STRUCT[i] = -Math.abs(STRUCT[i]);
         }
       }
-      widthKey = '';
+      widthKey = ''; fieldKey = '';
     }
 
     // ---- designated no-wake zones: polys in UTM ([[outer, hole..], ..] each)
     function setZones(list) {
       zones = (list || []).filter(z => z.polys && z.polys.some(pp => pp.length && pp[0].length > 3));   // rings only
       NWZ = new Float32Array(N).fill(BIG);
-      zoneIdx = null;
+      zoneIdx = null; fieldKey = '';
       if (!zones.length) return;
       const all = [];
       for (const z of zones) for (const p of z.polys) all.push(p);
@@ -635,19 +635,44 @@
       return out;
     }
 
-    // F1 = wake allowed, F2 = tow allowed, F3 = surf (guideline) allowed, for params p.
-    // Everything that reads these fields refills them from its own params first, so
-    // no query depends on which compute happened to run last.
+    // a width minimum: keep only the parts of {field > 0} that are at least widthM across. The
+    // field is a distance to the nearest edge, so a circle widthM wide fits wherever it reaches
+    // widthM / 2; those cores are grown back by the same radius (a morphological opening). Narrow
+    // necks and slivers drop out; wide water keeps its own edge. Half a cell of tolerance each
+    // way: nodes sit 5 m apart and a ridge can fall between two of them.
+    function openField(field, widthM) {
+      const hw = widthM / 2;
+      if (!(hw > 0)) return;
+      const seed = new Uint8Array(N);
+      let any = false;
+      for (let i = 0; i < N; i++) if (field[i] >= hw - 0.5 * cell) { seed[i] = 1; any = true; }
+      if (!any) { for (let i = 0; i < N; i++) if (field[i] > -cell) field[i] = -cell; return; }
+      const E = edt(seed, w, h);
+      // inside a core the field stays a true distance (lanes, U-turn spots and "widest" read it as room)
+      for (let i = 0; i < N; i++) if (!seed[i]) { const v = hw + 0.5 * cell - E[i] * cell; if (v < field[i]) field[i] = v; }
+    }
+
+    // F1 = wake allowed, F2 = tow allowed, F3 = wake surfing allowed, for params p. Surfing takes
+    // its distance, then its minimum depth, then its minimum width (rules.surf.minWidthFt).
+    // Everything that reads these fields refills them from its own params first, so no query
+    // depends on which compute ran last; the same params on the same structures and zones are
+    // not worked out twice.
+    let fieldKey = '';
     function fillFields(p) {
       const zonesOn = p.zonesOn !== false && zones.length > 0;
       const lvl = p.levelOffsetFt || 0;
       const R = p.rules;
+      const key = JSON.stringify([R.nowake, R.tow, R.surf, zonesOn, lvl, !!p.allNoWake]);
+      if (key === fieldKey) return zonesOn;
+      fieldKey = '';
       ruleField(R.nowake, zonesOn, lvl, F1);
       ruleField(R.tow, zonesOn, lvl, F2);
       for (let i = 0; i < N; i++) if (F1[i] < F2[i]) F2[i] = F1[i];
       ruleField(R.surf, zonesOn, lvl, F3);
       for (let i = 0; i < N; i++) if (F2[i] < F3[i]) F3[i] = F2[i];
+      if (R.surf.minWidthFt > 0) openField(F3, R.surf.minWidthFt * FT);
       if (p.allNoWake) for (let i = 0; i < N; i++) { const v = Math.min(W[i], -cell); F1[i] = v; F2[i] = v; F3[i] = v; }   // river-wide no-wake (high water)
+      fieldKey = key;
       return zonesOn;
     }
 
@@ -664,7 +689,19 @@
       res.bands.cruise = band(o => { for (let i = 0; i < N; i++) o[i] = Math.min(F1[i], -F2[i]); });
       res.bands.tow = band(o => { for (let i = 0; i < N; i++) o[i] = Math.min(F2[i], -F3[i]); });
       res.bands.surf = band(o => { o.set(F3); });
+      res.bands.towok = band(o => { o.set(F2); });      // all the towing water, surf water included (the Boating view)
+      // for a map that draws no no-tow band: all the water where a wake is allowed, and that water outside the wake-surf water
+      res.bands.wakeok = band(o => { o.set(F1); });
+      res.bands.wakenosurf = band(o => { for (let i = 0; i < N; i++) o[i] = Math.min(F1[i], -F3[i]); });
       res.timings.bands = Date.now() - t0;
+
+      // how much each wake-surf test removes: distance alone, then depth, then width (for the waterfall)
+      let surfDist = res.bands.surf.area, surfDepth = surfDist;      // reported only with p.stages (see stats below)
+      if (p.stages && !p.allNoWake && (R.surf.minDepthFt > 0 || R.surf.minWidthFt > 0)) {
+        const stage = rule => { ruleField(rule, zonesOn, lvl, TMP); for (let i = 0; i < N; i++) if (F2[i] < TMP[i]) TMP[i] = F2[i]; return areaOf(contour(TMP).map(gridRingToUTM)); };
+        surfDist = stage(Object.assign({}, R.surf, { minDepthFt: 0 }));
+        surfDepth = R.surf.minWidthFt > 0 ? (R.surf.minDepthFt > 0 ? stage(R.surf) : surfDist) : res.bands.surf.area;
+      }
 
       // designated-zone footprint inside the water (for stats / the waterfall)
       let zoneArea = 0;
@@ -743,10 +780,9 @@
         res.lines = { wake: contour(F1).map(gridRingToUTM), tow: contour(F2).map(gridRingToUTM), surf: contour(F3).map(gridRingToUTM) };
       }
 
-      // single-rule view ("where you could boat following only this rule")
+      // one activity at a time: where a wake (nowake), towing (tow) or wake surfing (surf) is allowed
       if (p.single && R[p.single]) {
-        ruleField(Object.assign({}, R[p.single]), false, lvl, TMP);
-        res.single = Object.assign({ rule: p.single }, traceUTM(TMP));
+        res.single = Object.assign({ rule: p.single }, traceUTM(p.single === 'surf' ? F3 : p.single === 'tow' ? F2 : F1));
       }
 
       const ac = m2 => m2 / M2_PER_ACRE;
@@ -761,6 +797,7 @@
         runs_ac: ac(res.runs.area), run_zones: res.runs.zones,
         longest_run_ft: res.runs.longest ? res.runs.longest.m / FT : 0,
       };
+      if (p.stages) { res.stats.surf_dist_ac = ac(surfDist); res.stats.surf_depth_ac = ac(surfDepth); }
       res.timings.total = Date.now() - t0;
       return res;
     }
@@ -818,6 +855,8 @@
       out.depth_ft = Number.isFinite(dp) ? Math.max(0, dp - ((p && p.levelOffsetFt) || 0)) : null;
       out.depth_full_pool_ft = Number.isFinite(dp) ? dp : null;
       if (WIDTH) out.width_m = WIDTH[Math.round(fr) * w + Math.round(fc)] || null;
+      // metres inside (+) or outside (-) the wake-surf water under p: distance, depth and width together
+      if (p && p.rules) { fillFields(p); out.surf_m = bil(F3, fc, fr); }
       return out;
     }
 
